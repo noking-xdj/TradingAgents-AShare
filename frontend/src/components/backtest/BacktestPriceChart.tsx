@@ -3,6 +3,7 @@ import {
     BusinessDay,
     CandlestickSeries,
     ColorType,
+    IChartApi,
     ISeriesApi,
     ISeriesMarkersPluginApi,
     LineSeries,
@@ -12,7 +13,7 @@ import {
     createChart,
     createSeriesMarkers,
 } from 'lightweight-charts'
-import { Layers3 } from 'lucide-react'
+import { Layers3, RotateCcw } from 'lucide-react'
 
 import type { KlineBacktestSignal, KlineBacktestTrade, KlineCandle } from '@/types'
 import {
@@ -59,6 +60,7 @@ export default function BacktestPriceChart({ candles, signals, trades, shortMa, 
     const [dark, setDark] = useState(document.documentElement.classList.contains('dark'))
     const [layers, setLayers] = useState<BacktestChartLayers>(initialLayers)
     const layersRef = useRef(layers)
+    const chartRef = useRef<IChartApi | null>(null)
     const layerApiRef = useRef<{
         shortMa: ISeriesApi<'Line'> | null
         longMa: ISeriesApi<'Line'> | null
@@ -110,6 +112,7 @@ export default function BacktestPriceChart({ candles, signals, trades, shortMa, 
             timeScale: { borderColor: dark ? '#334155' : '#cbd5e1', rightOffset: 5 },
             localization: { locale: 'zh-CN', dateFormat: 'yyyy-MM-dd' },
         })
+        chartRef.current = chart
 
         const candleSeries = chart.addSeries(CandlestickSeries, {
             upColor: '#ef4444', downColor: '#22c55e', wickUpColor: '#ef4444', wickDownColor: '#22c55e', borderVisible: false,
@@ -215,12 +218,19 @@ export default function BacktestPriceChart({ candles, signals, trades, shortMa, 
         window.addEventListener('resize', resize)
         return () => {
             window.removeEventListener('resize', resize)
+            if (chartRef.current === chart) chartRef.current = null
             layerApiRef.current = { shortMa: null, longMa: null, trendlines: [], fibonacci: [], tradeMarkers: null, markerData: [] }
             chart.remove()
         }
     }, [candles, dark, effectiveTrendTouches, longMa, shortMa, signals, trades, trendMinTouches])
 
     const toggleLayer = (key: BacktestChartLayerKey) => setLayers(current => ({ ...current, [key]: !current[key] }))
+    const resetView = () => {
+        const chart = chartRef.current
+        if (!chart) return
+        chart.priceScale('right').applyOptions({ autoScale: true })
+        chart.timeScale().fitContent()
+    }
     const layerButton = (key: BacktestChartLayerKey, label: string, color: string) => (
         <button
             type="button"
@@ -245,6 +255,7 @@ export default function BacktestPriceChart({ candles, signals, trades, shortMa, 
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
                         <span className="inline-flex items-center gap-1.5 font-medium text-slate-600 dark:text-slate-300"><Layers3 size={14} />图层管理</span>
                         <span className="flex gap-1.5">
+                            <button type="button" className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={resetView}><RotateCcw size={12} />重置视图</button>
                             <button type="button" className="rounded px-2 py-0.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => setLayers({ ...COMPACT_BACKTEST_CHART_LAYERS })}>精简</button>
                             <button type="button" className="rounded px-2 py-0.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => setLayers({ ...ALL_BACKTEST_CHART_LAYERS })}>全部显示</button>
                         </span>

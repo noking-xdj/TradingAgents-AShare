@@ -2,6 +2,8 @@ import {
     Bar,
     BarChart,
     CartesianGrid,
+    Cell,
+    LabelList,
     Legend,
     Line,
     LineChart,
@@ -53,11 +55,13 @@ export default function BacktestPerformanceCharts({ detail, selectedStrategy, eq
     }))
     const metrics = detail.strategies[selectedStrategy]?.metrics ?? {}
     const costData = [
-        { name: '佣金', value: number(metrics.commission) },
-        { name: '印花税', value: number(metrics.stamp_tax) },
-        { name: '过户费', value: number(metrics.transfer_fee) },
-        { name: '滑点', value: number(metrics.slippage_cost) },
+        { name: '佣金', value: number(metrics.commission), color: '#3b82f6' },
+        { name: '印花税', value: number(metrics.stamp_tax), color: '#ef4444' },
+        { name: '过户费', value: number(metrics.transfer_fee), color: '#8b5cf6' },
+        { name: '滑点', value: number(metrics.slippage_cost), color: '#f59e0b' },
     ]
+    const totalCost = number(metrics.total_cost)
+    const totalCostRatio = number(metrics.total_cost_ratio) * 100
 
     return (
         <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
@@ -87,14 +91,21 @@ export default function BacktestPerformanceCharts({ detail, selectedStrategy, eq
                 </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard title={`策略 ${selectedStrategy} 成本构成`} subtitle={`总成本 ¥${number(metrics.total_cost).toFixed(2)}`} className="2xl:col-span-2">
-                <ResponsiveContainer width="100%" height={240}>
-                    <BarChart data={costData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
-                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                        <YAxis tick={{ fontSize: 11 }} width={58} />
+            <ChartCard
+                title={`策略 ${selectedStrategy} 成本构成`}
+                subtitle={`总成本 ¥${totalCost.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · 占初始资金 ${totalCostRatio.toFixed(2)}%`}
+                className="2xl:col-span-2"
+            >
+                <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={costData} layout="vertical" margin={{ top: 8, right: 96, left: 8, bottom: 8 }} barCategoryGap="28%">
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.18} horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={value => `¥${number(value).toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={58} axisLine={false} tickLine={false} />
                         <Tooltip formatter={(value: number) => `¥${value.toFixed(2)}`} />
-                        <Bar dataKey="value" name="成本" fill="#f59e0b" radius={[5, 5, 0, 0]} />
+                        <Bar dataKey="value" name="成本" barSize={28} radius={[0, 8, 8, 0]} background={{ fill: 'rgba(148, 163, 184, 0.08)', radius: 8 }}>
+                            {costData.map(item => <Cell key={item.name} fill={item.color} />)}
+                            <LabelList dataKey="value" position="right" fill="#94a3b8" fontSize={12} formatter={(value: number) => `¥${value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                        </Bar>
                     </BarChart>
                 </ResponsiveContainer>
             </ChartCard>
