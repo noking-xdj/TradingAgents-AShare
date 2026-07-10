@@ -23,7 +23,7 @@ from api.models.kline_backtest import KlineCacheDB
 from tradingagents.dataflows.providers.cn_akshare_provider import AKSHARE_CALL_LOCK
 
 from .instrument import require_backtestable
-from .schemas import Bar, InstrumentType, primitive
+from .schemas import Bar, InstrumentType, KlineDataSource, primitive
 
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
@@ -104,10 +104,43 @@ ALIASES: dict[str, tuple[str, ...]] = {
     "low": ("最低", "low", "Low"),
     "close": ("收盘", "close", "Close"),
     "volume": ("成交量", "volume", "Volume", "vol"),
-    "amount": ("成交额", "amount", "Amount", "turnover"),
+    "amount": ("成交额", "amount", "Amount"),
     "change_percent": ("涨跌幅", "change_percent", "pct_chg"),
-    "turnover_rate": ("换手率", "turnover_rate"),
+    "turnover_rate": ("换手率", "turnover_rate", "turnover"),
 }
+
+
+SOURCE_APIS: dict[InstrumentType, dict[KlineDataSource, str]] = {
+    InstrumentType.STOCK: {
+        KlineDataSource.EASTMONEY: "stock_zh_a_hist",
+        KlineDataSource.SINA: "stock_zh_a_daily",
+        KlineDataSource.TENCENT: "stock_zh_a_hist_tx",
+    },
+    InstrumentType.FUND: {
+        KlineDataSource.EASTMONEY: "fund_etf_hist_em",
+        KlineDataSource.SINA: "fund_etf_hist_sina",
+    },
+}
+
+
+def source_api_for(
+    instrument_type: InstrumentType,
+    data_source: KlineDataSource | str,
+    *,
+    adjust: str,
+    market: str | None = None,
+) -> str:
+    """Resolve one explicitly selected AkShare endpoint without fallback."""
+    selected = KlineDataSource(data_source)
+    source_api = SOURCE_APIS.get(instrument_type, {}).get(selected)
+    if source_api is None:
+        raise ValueError(f"{instrument_type.value} 暂不支持 {selected.value} 数据源")
+    if instrument_type is InstrumentType.FUND and selected is KlineDataSource.SINA:
+        if adjust not in {"none", "raw", ""}:
+            raise ValueError("场内基金的新浪接口只支持不复权数据")
+    if market == "BJ" and selected is KlineDataSource.TENCENT:
+        raise ValueError("北交所股票暂不支持腾讯数据源")
+    return source_api
 
 
 def _find_column(df: pd.DataFrame, key: str, *, required: bool) -> Optional[str]:
@@ -396,7 +429,7 @@ class KlineCacheStore:
 
 
 class AkshareKlineProvider:
-    """One strict AkShare endpoint per instrument type; no vendor fallback."""
+    """One explicitly selected AkShare endpoint per run; no silent fallback."""
 
     def __init__(
         self,
@@ -426,6 +459,9 @@ class AkshareKlineProvider:
         source_api: str,
         symbol: str,
         kwargs: dict[str, Any],
+        requested_start: date,
+        requested_end: date,
+        requested_adjust: str,
     ) -> pd.DataFrame:
         for attempt in range(1, self.max_attempts + 1):
             logger.info(
@@ -434,9 +470,9 @@ class AkshareKlineProvider:
                 symbol,
                 attempt,
                 self.max_attempts,
-                kwargs["start_date"],
-                kwargs["end_date"],
-                kwargs["adjust"] or "raw",
+                requested_start.isoformat(),
+                requested_end.isoformat(),
+                requested_adjust or "raw",
             )
             try:
                 with AKSHARE_CALL_LOCK:
@@ -498,13 +534,20 @@ class AkshareKlineProvider:
         end_date: date,
         *,
         adjust: str = "qfq",
+        data_source: KlineDataSource | str = KlineDataSource.EASTMONEY,
         cache: Optional[KlineCacheStore] = None,
         force_refresh: bool = False,
         now: Optional[datetime] = None,
         instrument_type_override: str | None = None,
     ) -> NormalizedKlineData:
         info = require_backtestable(symbol, instrument_type_override)
-        source_api = "fund_etf_hist_em" if info.instrument_type is InstrumentType.FUND else "stock_zh_a_hist"
+        selected_source = KlineDataSource(data_source)
+        source_api = source_api_for(
+            info.instrument_type,
+            selected_source,
+            adjust=adjust,
+            market=info.market,
+        )
         if cache is not None and not force_refresh:
             cached = cache.get(
                 symbol=info.symbol,
@@ -519,22 +562,35 @@ class AkshareKlineProvider:
         import akshare as ak  # type: ignore
 
         adjust_arg = "" if adjust in {"none", "raw", ""} else adjust
-        kwargs = {
-            "symbol": info.code,
-            "period": "daily",
-            "start_date": start_date.strftime("%Y%m%d"),
-            "end_date": end_date.strftime("%Y%m%d"),
-            "adjust": adjust_arg,
-        }
-        if info.instrument_type is InstrumentType.FUND:
-            fetcher = ak.fund_etf_hist_em
+        compact_start = start_date.strftime("%Y%m%d")
+        compact_end = end_date.strftime("%Y%m%d")
+        market_symbol = f"{info.market.lower()}{info.code}"
+        if source_api in {"stock_zh_a_hist", "fund_etf_hist_em"}:
+            kwargs = {
+                "symbol": info.code,
+                "period": "daily",
+                "start_date": compact_start,
+                "end_date": compact_end,
+                "adjust": adjust_arg,
+            }
+        elif source_api == "fund_etf_hist_sina":
+            kwargs = {"symbol": market_symbol}
         else:
-            fetcher = ak.stock_zh_a_hist
+            kwargs = {
+                "symbol": market_symbol,
+                "start_date": compact_start,
+                "end_date": compact_end,
+                "adjust": adjust_arg,
+            }
+        fetcher = getattr(ak, source_api)
         frame = self._fetch_frame(
             fetcher,
             source_api=source_api,
             symbol=info.symbol,
             kwargs=kwargs,
+            requested_start=start_date,
+            requested_end=end_date,
+            requested_adjust=adjust,
         )
         result = normalize_dataframe(
             frame,
@@ -544,6 +600,19 @@ class AkshareKlineProvider:
             akshare_version=getattr(ak, "__version__", "unknown"),
             fetched_at=now,
         )
+        selected_bars = [bar for bar in result.bars if start_date <= bar.date <= end_date]
+        if not selected_bars:
+            raise ValueError("AkShare returned no K-line data in the requested period")
+        if len(selected_bars) != len(result.bars):
+            result = NormalizedKlineData(
+                symbol=result.symbol,
+                adjust=result.adjust,
+                source_api=result.source_api,
+                akshare_version=result.akshare_version,
+                fetched_at=result.fetched_at,
+                bars=selected_bars,
+                data_hash=canonical_data_hash(selected_bars, result.adjust),
+            )
         if cache is not None:
             cache.put(result)
         return result

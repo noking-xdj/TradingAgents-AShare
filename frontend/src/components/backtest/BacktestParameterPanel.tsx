@@ -1,6 +1,7 @@
 import { RotateCcw, Rocket } from 'lucide-react'
 
-import type { KlineBacktestCreateInput, KlineBacktestInstrument, KlineBacktestStrategy } from '@/types'
+import type { KlineBacktestCreateInput, KlineBacktestDataSource, KlineBacktestInstrument, KlineBacktestStrategy } from '@/types'
+import { BACKTEST_DATA_SOURCE_LABELS } from '@/utils/klineBacktest'
 import BacktestSymbolPicker from './BacktestSymbolPicker'
 
 interface Props {
@@ -30,6 +31,9 @@ const instrumentLabel: Record<KlineBacktestInstrument, string> = {
 }
 
 export default function BacktestParameterPanel({ value, instrument, errors, disabled, analysisSymbol, selectedName, onChange, onSymbolSelect, onReset, onSubmit }: Props) {
+    const dataSources: KlineBacktestDataSource[] = instrument === 'fund'
+        ? ['eastmoney', 'sina']
+        : ['eastmoney', 'sina', 'tencent']
     const setNumber = (key: keyof KlineBacktestCreateInput, raw: string) => {
         const numberValue = raw === '' ? 0 : Number(raw)
         onChange({ ...value, [key]: numberValue })
@@ -132,7 +136,7 @@ export default function BacktestParameterPanel({ value, instrument, errors, disa
                         </div>
                     </details>
 
-                    <div className="grid grid-cols-[minmax(0,1fr)_160px_180px] gap-4 items-end">
+                    <div className="grid grid-cols-[minmax(0,1fr)_160px_160px_180px] gap-4 items-end">
                         <fieldset>
                             <legend className="mb-2 text-xs text-slate-500">待比较策略组</legend>
                             <div className="flex flex-wrap gap-2">
@@ -144,6 +148,11 @@ export default function BacktestParameterPanel({ value, instrument, errors, disa
                                 ))}
                             </div>
                         </fieldset>
+                        <label className="text-xs text-slate-500">行情数据源
+                            <select className="input mt-1 w-full" value={value.data_source} disabled={disabled} onChange={event => onChange({ ...value, data_source: event.target.value as KlineBacktestDataSource })}>
+                                {dataSources.map(source => <option key={source} value={source}>{BACKTEST_DATA_SOURCE_LABELS[source]}{instrument === 'fund' && source === 'sina' ? '（不复权）' : ''}</option>)}
+                            </select>
+                        </label>
                         <label className="text-xs text-slate-500">复权方式
                             <select className="input mt-1 w-full" value={value.adjust} disabled={disabled} onChange={event => onChange({ ...value, adjust: event.target.value as KlineBacktestCreateInput['adjust'] })}>
                                 <option value="qfq">前复权</option>
@@ -157,6 +166,7 @@ export default function BacktestParameterPanel({ value, instrument, errors, disa
                             强制刷新数据
                         </label>
                     </div>
+                    <p className="text-xs text-slate-500">每次回测锁定所选数据源并记录接口、版本和数据哈希；连接失败不会静默切换供应商。</p>
                 </div>
             </div>
         </section>

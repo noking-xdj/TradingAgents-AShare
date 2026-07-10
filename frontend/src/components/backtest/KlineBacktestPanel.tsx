@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Clock3, Loader2, Trash2 } from 'lucide-react'
 
 import { useKlineBacktestStore } from '@/stores/klineBacktestStore'
-import type { KlineBacktestCreateInput, KlineBacktestStatus } from '@/types'
-import { classifyBacktestInstrument, createDefaultBacktestInput, defaultBacktestFees, normalizeBacktestSymbol, validateBacktestInput } from '@/utils/klineBacktest'
+import type { KlineBacktestCreateInput, KlineBacktestDataSource, KlineBacktestStatus } from '@/types'
+import { BACKTEST_DATA_SOURCE_LABELS, classifyBacktestInstrument, createDefaultBacktestInput, defaultBacktestFees, normalizeBacktestSymbol, validateBacktestInput } from '@/utils/klineBacktest'
 import BacktestParameterPanel from './BacktestParameterPanel'
 import BacktestResults from './BacktestResults'
 
@@ -60,6 +60,12 @@ export default function KlineBacktestPanel({ symbol }: Props) {
     const changeForm = (value: KlineBacktestCreateInput) => setForm(value)
     const reset = () => setForm(createDefaultBacktestInput(backtestSymbol))
     const start = () => { void submit({ ...form, symbol: backtestSymbol }).catch(() => undefined) }
+    const retryWithSource = (dataSource: KlineBacktestDataSource) => {
+        if (!detail) return
+        const next = { ...detail.params_snapshot, symbol: detail.symbol, data_source: dataSource }
+        setForm(next)
+        void submit(next).catch(() => undefined)
+    }
     const selectBacktestSymbol = (raw: string, name?: string) => {
         const nextSymbol = normalizeBacktestSymbol(raw)
         if (!nextSymbol || nextSymbol === backtestSymbol) return
@@ -69,6 +75,9 @@ export default function KlineBacktestPanel({ symbol }: Props) {
         setForm(current => ({
             ...current,
             symbol: nextSymbol,
+            data_source: nextInstrument === 'fund' || (nextSymbol.endsWith('.BJ') && current.data_source === 'tencent')
+                ? 'eastmoney'
+                : current.data_source,
             fee: defaultBacktestFees(nextInstrument),
         }))
     }
@@ -107,7 +116,7 @@ export default function KlineBacktestPanel({ symbol }: Props) {
                             >
                                 <span className="flex items-center justify-between gap-2"><span className="text-sm font-semibold">{run.start_date} — {run.end_date}</span><span className={STATUS[run.status].className}>{STATUS[run.status].label}</span></span>
                                 <span className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500">
-                                    <span className="flex items-center gap-1"><Clock3 size={12} /> {new Date(run.created_at).toLocaleString('zh-CN')}</span>
+                                    <span className="flex items-center gap-1"><Clock3 size={12} /> {new Date(run.created_at).toLocaleString('zh-CN')} · {BACKTEST_DATA_SOURCE_LABELS[run.params_snapshot.data_source ?? 'eastmoney']}</span>
                                     {(run.status === 'completed' || run.status === 'failed') && <span role="button" tabIndex={0} className="rounded p-1 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950" onClick={event => { event.stopPropagation(); void deleteRun(run.run_id, backtestSymbol) }} onKeyDown={() => undefined}><Trash2 size={13} /></span>}
                                 </span>
                             </button>
@@ -129,7 +138,20 @@ export default function KlineBacktestPanel({ symbol }: Props) {
             )}
 
             {!detailLoading && detail?.status === 'failed' && (
-                <div className="card border-red-200 dark:border-red-900"><h3 className="font-semibold text-red-600">回测失败 · {detail.error_code ?? 'unknown'}</h3><p className="mt-2 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">{detail.error ?? '未返回错误详情'}</p></div>
+                <div className="card border-red-200 dark:border-red-900">
+                    <h3 className="font-semibold text-red-600">回测失败 · {detail.error_code ?? 'unknown'}</h3>
+                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">所选数据源：{BACKTEST_DATA_SOURCE_LABELS[detail.params_snapshot.data_source ?? 'eastmoney']}</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">{detail.error ?? '未返回错误详情'}</p>
+                    {detail.error_code === 'data_source_connection_failed' && instrument === 'stock' && (
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                            <span className="text-xs text-slate-500">明确选择其他供应商创建新回测：</span>
+                            {(['eastmoney', 'sina', 'tencent'] as KlineBacktestDataSource[])
+                                .filter(source => source !== (detail.params_snapshot.data_source ?? 'eastmoney'))
+                                .filter(source => !(detail.symbol.endsWith('.BJ') && source === 'tencent'))
+                                .map(source => <button key={source} type="button" className="btn-secondary text-sm" disabled={submitting} onClick={() => retryWithSource(source)}>改用{BACKTEST_DATA_SOURCE_LABELS[source]}</button>)}
+                        </div>
+                    )}
+                </div>
             )}
 
             {!detailLoading && detail?.status === 'completed' && (

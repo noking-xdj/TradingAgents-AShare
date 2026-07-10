@@ -19,6 +19,7 @@ describe('K-line backtest defaults', () => {
         })
         const value = createDefaultBacktestInput('601398.SH', new Date('2026-07-11T12:00:00+08:00'))
         expect(value.strategy_keys).toEqual(['A', 'B', 'C', 'D'])
+        expect(value.data_source).toBe('eastmoney')
         expect(value.initial_cash).toBe(100000)
         expect(value.fee.minimum_commission).toBe(0)
     })
@@ -53,6 +54,18 @@ describe('K-line backtest validation', () => {
 
     it('accepts the complete default stock configuration', () => {
         expect(validateBacktestInput(createDefaultBacktestInput('601398.SH'))).toEqual([])
+    })
+
+    it('validates source capabilities without silently changing the selection', () => {
+        const fund = createDefaultBacktestInput('510300.SH')
+        fund.data_source = 'sina'
+        expect(validateBacktestInput(fund)).toContain('场内基金使用新浪时只能选择不复权')
+        fund.adjust = 'raw'
+        expect(validateBacktestInput(fund)).toEqual([])
+
+        const bse = createDefaultBacktestInput('830799.BJ')
+        bse.data_source = 'tencent'
+        expect(validateBacktestInput(bse)).toContain('北交所股票暂不支持腾讯数据源')
     })
 })
 

@@ -19,11 +19,12 @@ from .data_provider import (
     KlineCacheStore,
     KlineDataSourceConnectionError,
     NormalizedKlineData,
+    source_api_for,
 )
 from .fees import FeeProfile
 from .instrument import require_backtestable
 from .runner import run_backtest
-from .schemas import InstrumentType, KlineBacktestCreateRequest
+from .schemas import KlineBacktestCreateRequest
 
 
 def _fee_profile(snapshot: dict[str, Any]) -> FeeProfile:
@@ -71,7 +72,12 @@ class KlineBacktestTaskManager:
         fetch_start = request.start_date - timedelta(days=270)
         cache_start = request.start_date - timedelta(days=240)
         info = require_backtestable(request.symbol, request.instrument_type_override)
-        source_api = "fund_etf_hist_em" if info.instrument_type is InstrumentType.FUND else "stock_zh_a_hist"
+        source_api = source_api_for(
+            info.instrument_type,
+            request.data_source,
+            adjust=request.adjust,
+            market=info.market,
+        )
         if not request.force_refresh:
             with get_db_ctx() as db:
                 cached = KlineCacheStore(db).get(
@@ -89,6 +95,7 @@ class KlineBacktestTaskManager:
             fetch_start,
             request.end_date,
             adjust=request.adjust,
+            data_source=request.data_source,
             cache=None,
             force_refresh=True,
             instrument_type_override=request.instrument_type_override,
@@ -137,6 +144,7 @@ class KlineBacktestTaskManager:
                 "statistics_end": request.end_date.isoformat(),
                 "warmup_bars": warmup_count,
                 "source_api": data.source_api,
+                "data_source": request.data_source.value,
                 "akshare_version": data.akshare_version,
                 "fetched_at": data.fetched_at.isoformat(),
                 "adjust": request.adjust,

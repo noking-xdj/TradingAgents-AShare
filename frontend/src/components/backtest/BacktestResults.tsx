@@ -11,6 +11,7 @@ import type {
 } from '@/types'
 import BacktestPerformanceCharts from './BacktestPerformanceCharts'
 import BacktestPriceChart from './BacktestPriceChart'
+import { BACKTEST_DATA_SOURCE_LABELS } from '@/utils/klineBacktest'
 
 interface Props {
     detail: KlineBacktestDetail
@@ -74,7 +75,9 @@ export default function BacktestResults({ detail, selectedStrategy, equityByStra
                 <div>
                     <h2 className="font-semibold">回测结果 · {detail.symbol}</h2>
                     <p className="mt-1 text-xs text-slate-500">
-                        {detail.actual_data_range ? `实际数据 ${String(detail.actual_data_range.start_date ?? detail.start_date)} 至 ${String(detail.actual_data_range.end_date ?? detail.end_date)}` : `${detail.start_date} 至 ${detail.end_date}`}
+                        {detail.actual_data_range ? `实际数据 ${String(detail.actual_data_range.actual_start ?? detail.start_date)} 至 ${String(detail.actual_data_range.actual_end ?? detail.end_date)}` : `${detail.start_date} 至 ${detail.end_date}`}
+                        {` · ${BACKTEST_DATA_SOURCE_LABELS[detail.params_snapshot.data_source ?? 'eastmoney']}`}
+                        {detail.actual_data_range?.source_api ? `（${String(detail.actual_data_range.source_api)}）` : ''}
                         {detail.benchmark?.actual_entry_date ? ` · 基准实际建仓 ${detail.benchmark.actual_entry_date}` : ''}
                     </p>
                 </div>

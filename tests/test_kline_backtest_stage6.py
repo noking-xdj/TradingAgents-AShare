@@ -137,6 +137,7 @@ def test_create_is_pending_202_activity_delete_is_409_and_index_is_rejected():
         run = db.query(KBRunDB).filter(KBRunDB.run_id == body["run_id"]).one()
         assert run.user_id == user.id
         assert run.status == "pending"
+        assert run.params_snapshot["data_source"] == "eastmoney"
         assert "user_id" not in KBTradeDB.__table__.columns
 
     assert client.delete(f"/v1/kline-backtests/{body['run_id']}", headers=_headers(token)).status_code == 409
@@ -148,6 +149,15 @@ def test_create_is_pending_202_activity_delete_is_409_and_index_is_rejected():
         )
     assert rejected.status_code == 400
     assert "暂不支持指数" in rejected.json()["detail"]
+
+    with patch("api.routers.kline_backtest.task_manager.submit_run", return_value=MagicMock()):
+        unsupported = client.post(
+            "/v1/kline-backtests",
+            headers=_headers(token),
+            json=_request(symbol="510300.SH", data_source="tencent").model_dump(mode="json"),
+        )
+    assert unsupported.status_code == 400
+    assert "暂不支持 tencent" in unsupported.json()["detail"]
 
 
 def test_state_machine_persists_all_results_enforces_join_ownership_and_explicit_delete():

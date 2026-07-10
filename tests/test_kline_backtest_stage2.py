@@ -26,6 +26,7 @@ from api.services.kline_backtest.data_provider import (
     KlineDataSourceConnectionError,
     align_to_trading_calendar,
     normalize_dataframe,
+    source_api_for,
 )
 from api.services.kline_backtest.fees import (
     FUND_FEE_PROFILE,
@@ -36,7 +37,7 @@ from api.services.kline_backtest.fees import (
 from api.services.kline_backtest.instrument import classify_instrument, require_backtestable
 from api.services.kline_backtest.runner import _prepare_timeline
 from api.services.kline_backtest.schemas import BacktestConfig, Bar
-from api.services.kline_backtest.schemas import InstrumentType, Side
+from api.services.kline_backtest.schemas import InstrumentType, KlineDataSource, Side
 
 
 @pytest.mark.parametrize(
@@ -99,6 +100,13 @@ def _frame() -> pd.DataFrame:
     ])
 
 
+def _english_frame() -> pd.DataFrame:
+    return pd.DataFrame([
+        {"date": "2025-01-02", "open": 10, "high": 11, "low": 9, "close": 10.5, "volume": 100, "amount": 1_000_000, "turnover": 0.012},
+        {"date": "2025-01-03", "open": 10.5, "high": 12, "low": 10, "close": 11.5, "volume": 120, "amount": 1_300_000, "turnover": 0.014},
+    ])
+
+
 def test_normalization_keeps_amount_separate_from_volume_and_hash_is_stable():
     now = datetime(2025, 1, 4, 16, tzinfo=timezone.utc)
     first = normalize_dataframe(
@@ -148,6 +156,86 @@ def test_manual_fund_override_selects_fund_akshare_endpoint(monkeypatch):
     )
     assert data.source_api == "fund_etf_hist_em"
     assert calls[0][0] == "fund"
+
+
+@pytest.mark.parametrize(
+    ("data_source", "source_api"),
+    [
+        (KlineDataSource.EASTMONEY, "stock_zh_a_hist"),
+        (KlineDataSource.SINA, "stock_zh_a_daily"),
+        (KlineDataSource.TENCENT, "stock_zh_a_hist_tx"),
+    ],
+)
+def test_explicit_stock_source_selects_exactly_one_endpoint(monkeypatch, data_source, source_api):
+    calls: list[tuple[str, dict]] = []
+
+    def fetch(name):
+        def inner(**kwargs):
+            calls.append((name, kwargs))
+            return _english_frame() if name != "stock_zh_a_hist" else _frame()
+        return inner
+
+    fake_akshare = SimpleNamespace(
+        __version__="test",
+        stock_zh_a_hist=fetch("stock_zh_a_hist"),
+        stock_zh_a_daily=fetch("stock_zh_a_daily"),
+        stock_zh_a_hist_tx=fetch("stock_zh_a_hist_tx"),
+    )
+    monkeypatch.setitem(sys.modules, "akshare", fake_akshare)
+
+    data = AkshareKlineProvider().fetch(
+        "600519.SH",
+        date(2025, 1, 2),
+        date(2025, 1, 3),
+        data_source=data_source,
+        now=datetime(2025, 1, 4, 16, tzinfo=timezone.utc),
+    )
+
+    assert [name for name, _ in calls] == [source_api]
+    assert data.source_api == source_api
+    assert data.bars[0].amount == Decimal("1000000")
+    if data_source is not KlineDataSource.EASTMONEY:
+        assert calls[0][1]["symbol"] == "sh600519"
+        assert "period" not in calls[0][1]
+        assert data.bars[0].turnover_rate == Decimal("0.012")
+
+
+def test_selected_source_connection_failure_never_silently_falls_back(monkeypatch):
+    calls: list[str] = []
+
+    def eastmoney(**kwargs):
+        calls.append("eastmoney")
+        raise requests_exceptions.ConnectionError("remote closed")
+
+    def unexpected(name):
+        def inner(**kwargs):
+            calls.append(name)
+            return _english_frame()
+        return inner
+
+    monkeypatch.setitem(sys.modules, "akshare", SimpleNamespace(
+        __version__="test",
+        stock_zh_a_hist=eastmoney,
+        stock_zh_a_daily=unexpected("sina"),
+        stock_zh_a_hist_tx=unexpected("tencent"),
+    ))
+
+    with pytest.raises(KlineDataSourceConnectionError):
+        AkshareKlineProvider(max_attempts=1).fetch(
+            "600519.SH", date(2025, 1, 2), date(2025, 1, 3), data_source="eastmoney",
+        )
+    assert calls == ["eastmoney"]
+
+
+def test_source_capabilities_reject_unsupported_instrument_combinations():
+    assert source_api_for(InstrumentType.FUND, "eastmoney", adjust="qfq") == "fund_etf_hist_em"
+    assert source_api_for(InstrumentType.FUND, "sina", adjust="raw") == "fund_etf_hist_sina"
+    with pytest.raises(ValueError, match="只支持不复权"):
+        source_api_for(InstrumentType.FUND, "sina", adjust="qfq")
+    with pytest.raises(ValueError, match="暂不支持 tencent"):
+        source_api_for(InstrumentType.FUND, "tencent", adjust="raw")
+    with pytest.raises(ValueError, match="北交所"):
+        source_api_for(InstrumentType.STOCK, "tencent", adjust="qfq", market="BJ")
 
 
 def test_akshare_connection_failure_retries_then_succeeds_and_logs(monkeypatch, caplog):

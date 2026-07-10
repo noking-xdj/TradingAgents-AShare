@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from api.database import UserDB, get_db
 from api.dependencies import require_api_user
 from api.services.kline_backtest import repository, task_manager
+from api.services.kline_backtest.data_provider import source_api_for
 from api.services.kline_backtest.fees import FeeProfile, default_fee_profile
 from api.services.kline_backtest.instrument import normalize_symbol, require_backtestable
 from api.services.kline_backtest.schemas import KlineBacktestCreateRequest, primitive
@@ -49,6 +50,12 @@ def create_kline_backtest(
 ):
     try:
         info = require_backtestable(body.symbol, body.instrument_type_override)
+        source_api_for(
+            info.instrument_type,
+            body.data_source,
+            adjust=body.adjust,
+            market=info.market,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

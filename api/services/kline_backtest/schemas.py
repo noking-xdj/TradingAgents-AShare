@@ -21,6 +21,12 @@ class InstrumentType(str, Enum):
     INDEX = "index"
 
 
+class KlineDataSource(str, Enum):
+    EASTMONEY = "eastmoney"
+    SINA = "sina"
+    TENCENT = "tencent"
+
+
 class Side(str, Enum):
     BUY = "BUY"
     SELL = "SELL"
@@ -250,6 +256,7 @@ class KlineBacktestCreateRequest(BaseModel):
     strategy_keys: list[Literal["A", "B", "C", "D"]] = Field(
         default_factory=lambda: ["A", "B", "C", "D"],
     )
+    data_source: KlineDataSource = KlineDataSource.EASTMONEY
     adjust: Literal["qfq", "hfq", "none", "raw"] = "qfq"
     force_refresh: bool = False
 

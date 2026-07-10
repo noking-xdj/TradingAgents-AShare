@@ -1,9 +1,16 @@
 import type {
     KlineBacktestCreateInput,
+    KlineBacktestDataSource,
     KlineBacktestFeeInput,
     KlineBacktestInstrument,
     KlineBacktestSignal,
 } from '@/types'
+
+export const BACKTEST_DATA_SOURCE_LABELS: Record<KlineBacktestDataSource, string> = {
+    eastmoney: '东方财富',
+    sina: '新浪财经',
+    tencent: '腾讯财经',
+}
 
 export function previousFullYear(today = new Date()): { start: string; end: string } {
     const year = today.getFullYear() - 1
@@ -65,6 +72,7 @@ export function createDefaultBacktestInput(symbol: string, today = new Date()): 
         start_date: period.start,
         end_date: period.end,
         strategy_keys: ['A', 'B', 'C', 'D'],
+        data_source: 'eastmoney',
         adjust: 'qfq',
         force_refresh: false,
         initial_cash: 100000,
@@ -92,6 +100,8 @@ export function createDefaultBacktestInput(symbol: string, today = new Date()): 
 
 export function validateBacktestInput(input: KlineBacktestCreateInput): string[] {
     const errors: string[] = []
+    const instrument = classifyBacktestInstrument(input.symbol)
+    const normalized = normalizeBacktestSymbol(input.symbol)
     if (!input.symbol.trim()) errors.push('证券代码不能为空')
     if (!input.start_date || !input.end_date || input.start_date > input.end_date) errors.push('开始日期不能晚于结束日期')
     if (!(input.short_ma > 0 && input.short_ma < input.long_ma)) errors.push('短期均线必须小于长期均线')
@@ -106,6 +116,9 @@ export function validateBacktestInput(input: KlineBacktestCreateInput): string[]
     if (input.stop_loss != null && (input.stop_loss <= 0 || input.stop_loss >= 1)) errors.push('止损比例必须在 0 到 100% 之间')
     if (input.take_profit != null && input.take_profit <= 0) errors.push('止盈比例必须大于 0')
     if (input.max_deferred_days < 0) errors.push('挂单顺延上限不能为负数')
+    if (instrument === 'fund' && input.data_source === 'tencent') errors.push('场内基金暂不支持腾讯数据源')
+    if (instrument === 'fund' && input.data_source === 'sina' && !['none', 'raw'].includes(input.adjust)) errors.push('场内基金使用新浪时只能选择不复权')
+    if (normalized?.endsWith('.BJ') && input.data_source === 'tencent') errors.push('北交所股票暂不支持腾讯数据源')
     return errors
 }
 

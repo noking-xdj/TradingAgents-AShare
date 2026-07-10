@@ -309,6 +309,7 @@ export interface KlineResponse {
 export type KlineBacktestStatus = 'pending' | 'running' | 'completed' | 'failed'
 export type KlineBacktestStrategy = 'A' | 'B' | 'C' | 'D'
 export type KlineBacktestInstrument = 'stock' | 'fund' | 'index'
+export type KlineBacktestDataSource = 'eastmoney' | 'sina' | 'tencent'
 
 export interface KlineBacktestFeeInput {
     commission_rate: number
@@ -324,6 +325,7 @@ export interface KlineBacktestCreateInput {
     start_date: string
     end_date: string
     strategy_keys: KlineBacktestStrategy[]
+    data_source: KlineBacktestDataSource
     adjust: 'qfq' | 'hfq' | 'none' | 'raw'
     force_refresh: boolean
     initial_cash: number
