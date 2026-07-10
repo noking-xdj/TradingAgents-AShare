@@ -45,12 +45,12 @@ python -m pytest -vv -p no:cacheprovider \
 
 ```text
 218 collected
-202 passed
-5 failed
+207 passed
+0 failed
 11 skipped
 0 errors
 63 warnings
-completed in 16.27s
+completed in 15.97s
 ```
 
 pytest 正常运行到 100% 并退出，不再卡在 `tests/test_scheduled_queue.py`。
@@ -77,35 +77,35 @@ TestChatCompletionsEndpoint::test_requires_auth PASSED
 
 11 项均来自 `tests/test_job_store_redis.py`，原因是隔离容器没有运行 `redis://localhost:6379/15`。这些测试不是失败；在带 Redis 的阶段 8 集成环境中应另行执行。
 
-## 4. 已知失败：等待人工口径决策
+## 4. 已确认口径与 Git 考古依据
 
-以下 5 项是测试期望与当前实现行为不一致。按本任务约束，两侧均未修改。
+原基线中的 5 项失败均确认是有意产品变更后测试没有同步，不是实现回归。现已只更新测试，产品实现未修改。
 
-### 4.1 默认 horizon
+### 4.1 单次综合分析固定使用 short horizon
 
-1. `tests/test_intent_parser.py::test_parse_intent_returns_defaults`
-   - 期望：`["short", "medium"]`
-   - 实际：`["short"]`
+- 主依据：`b40824b9bb29c193a5cb5bbd618d2fe85e3915b6`
+- 提交信息：`fix: 提升决策准确率 — verdict 改革 + 方向翻转治理 + 数据完整性 (#91)`
+- 提交说明明确写明：去掉双 horizon，graph 只运行一次，`intent_parser` 固定返回 `["short"]`，各分析师在内部使用自己的自然时间窗口。
+- 二次确认：`c1386e3dec854b0e18f2dfc47034bf0c80dff955` 将中英文 prompt 示例同步为固定 `["short"]`。
 
-2. `tests/test_intent_parser.py::test_parse_intent_fallback_on_invalid_json`
-   - 期望：无效 JSON 回退为 `["short", "medium"]`
-   - 实际：回退为 `["short"]`
+因此以下两项测试均对齐为 `["short"]`：
 
-### 4.2 短线基本面提示文案
+- 正常 JSON 解析结果；
+- 无效 JSON 的 fallback。
 
-3. `tests/test_intent_parser.py::test_build_horizon_context_short_fundamentals_has_downweight_hint`
-   - 期望：短线上下文包含“次要”字样，明确下调基本面权重
-   - 实际：只包含“短线（1-2周，技术面主导）”，没有“次要”字样
+### 4.2 horizon context 不再按 agent_type 全局降权
+
+- 依据：`b40824b9bb29c193a5cb5bbd618d2fe85e3915b6`
+- 该提交明确删除 `_WEIGHT_HINTS`，不再由全局 horizon 压制某类分析师；fundamentals/macro 使用各自的 medium 自然窗口，最终权重交由 Research Manager 动态判断。
+- 旧测试对中文“次要”做字面断言，已经与新架构冲突。
+- 新测试改为语义断言：相同 horizon、关注点和问题下，`agent_type="fundamentals"` 与不指定 `agent_type` 生成相同 context。测试不再绑定具体中文文案。
 
 ### 4.3 孤儿报告恢复返回契约
 
-4. `tests/test_report_recovery.py::test_recover_stale_active_reports_marks_empty_running_report_failed`
-   - 期望：`{"total": 1, "completed": 0, "failed": 1}`
-   - 实际：`{"total": 1, "failed": 1}`
-
-5. `tests/test_report_recovery.py::test_recover_stale_active_reports_marks_partial_running_report_failed`
-   - 期望：`{"total": 1, "completed": 0, "failed": 1}`
-   - 实际：`{"total": 1, "failed": 1}`
+- 依据：`04e5b3774a401d6a54bb8151541c67e210a4ee76`
+- 提交说明明确写明：`Remove misleading completed: 0 from recover_stale_active_reports return`。
+- 全仓唯一生产调用方位于 `scheduler/main.py`，只读取 `report_reset["total"]`；未发现任何 `completed` 键消费者。
+- 两项测试已对齐实际契约：`{"total": 1, "failed": 1}`，无需修改实现。
 
 ## 5. 已修复的基线问题
 
@@ -114,16 +114,17 @@ TestChatCompletionsEndpoint::test_requires_auth PASSED
 - `test_scheduled_queue.py` 对齐 `scheduler.main._concurrency_slot` 和 semaphore 状态，并为事件等待与 gather 增加保护超时；两个测试不再永久挂死。
 - 持仓导入测试的内存 SQLite 使用 `StaticPool` 与 `check_same_thread=False`，匹配调度器的 `asyncio.to_thread` 执行方式。
 - 股票名称缓存测试同时保存、设置并恢复 `_cn_stock_map` 与 `_cn_stock_reverse_map`，不再依赖测试顺序或预热状态。
+- 意图解析、horizon context 和孤儿报告恢复的 5 项过期断言已依据第 4 节 Git 历史完成对齐。
 
 ## 6. 后续回归判定规则
 
-在第 4 节口径未决前，以下结果视为与本基线一致：
+以下结果视为与最终基线一致：
 
 - pytest 正常运行结束；
+- `0 failed`；
 - `0 errors`；
-- failed 仅限第 4 节列出的 5 项；
-- 不新增 skipped；
+- skipped 仅限未运行 Redis 时的 11 项 `tests/test_job_store_redis.py`；
 - K 线回测专项 32 项全部通过；
 - 两个 `test_requires_auth` 全部通过。
 
-任何新增失败、错误、挂死，或既有通过项转为 skipped，均视为回归。第 4 节任一口径一旦由人工确认，应同步修改实现或测试，并更新本基线。
+任何失败、错误、挂死、新增 skipped，或既有通过项转为 skipped，均视为回归。带 Redis 的阶段 8 集成环境还应要求 11 项 Redis 测试执行并通过。
