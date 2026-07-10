@@ -72,7 +72,17 @@ export const useKlineBacktestStore = create<KlineBacktestState>((set, get) => ({
     error: null,
 
     loadHistory: async (symbol) => {
-        set({ historyLoading: true, error: null })
+        set({
+            historyLoading: true,
+            error: null,
+            history: [],
+            selectedRunId: null,
+            detail: null,
+            trades: [],
+            signals: [],
+            equityByStrategy: {},
+            candles: [],
+        })
         try {
             const page = await api.listKlineBacktests(symbol, 0, 50)
             const current = get().selectedRunId

@@ -4,6 +4,7 @@ import {
     classifyBacktestInstrument,
     createDefaultBacktestInput,
     defaultBacktestFees,
+    normalizeBacktestSymbol,
     previousFullYear,
     splitEffectiveTrendlines,
     validateBacktestInput,
@@ -23,6 +24,10 @@ describe('K-line backtest defaults', () => {
     })
 
     it('matches backend instrument classification and configured fee defaults', () => {
+        expect(normalizeBacktestSymbol('600519')).toBe('600519.SH')
+        expect(normalizeBacktestSymbol('159915')).toBe('159915.SZ')
+        expect(normalizeBacktestSymbol('SH000001')).toBe('000001.SH')
+        expect(normalizeBacktestSymbol('贵州茅台')).toBeNull()
         expect(classifyBacktestInstrument('000001.SH')).toBe('index')
         expect(classifyBacktestInstrument('399006.SZ')).toBe('index')
         expect(classifyBacktestInstrument('510300.SH')).toBe('fund')

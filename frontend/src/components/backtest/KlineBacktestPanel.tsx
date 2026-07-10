@@ -3,7 +3,7 @@ import { Clock3, Loader2, Trash2 } from 'lucide-react'
 
 import { useKlineBacktestStore } from '@/stores/klineBacktestStore'
 import type { KlineBacktestCreateInput, KlineBacktestStatus } from '@/types'
-import { classifyBacktestInstrument, createDefaultBacktestInput, validateBacktestInput } from '@/utils/klineBacktest'
+import { classifyBacktestInstrument, createDefaultBacktestInput, defaultBacktestFees, normalizeBacktestSymbol, validateBacktestInput } from '@/utils/klineBacktest'
 import BacktestParameterPanel from './BacktestParameterPanel'
 import BacktestResults from './BacktestResults'
 
@@ -17,9 +17,11 @@ const STATUS: Record<KlineBacktestStatus, { label: string; className: string }> 
 }
 
 export default function KlineBacktestPanel({ symbol }: Props) {
-    const normalizedSymbol = symbol.trim().toUpperCase()
-    const instrument = classifyBacktestInstrument(normalizedSymbol)
-    const [form, setForm] = useState<KlineBacktestCreateInput>(() => createDefaultBacktestInput(normalizedSymbol))
+    const analysisSymbol = normalizeBacktestSymbol(symbol) ?? symbol.trim().toUpperCase()
+    const [backtestSymbol, setBacktestSymbol] = useState(analysisSymbol)
+    const [backtestName, setBacktestName] = useState<string | undefined>()
+    const instrument = classifyBacktestInstrument(backtestSymbol)
+    const [form, setForm] = useState<KlineBacktestCreateInput>(() => createDefaultBacktestInput(backtestSymbol))
     const mountedRef = useRef(true)
     const {
         history, selectedRunId, selectedStrategy, detail, trades, signals, equityByStrategy, candles,
@@ -28,8 +30,8 @@ export default function KlineBacktestPanel({ symbol }: Props) {
     } = useKlineBacktestStore()
 
     useEffect(() => {
-        void loadHistory(normalizedSymbol)
-    }, [loadHistory, normalizedSymbol])
+        void loadHistory(backtestSymbol)
+    }, [backtestSymbol, loadHistory])
 
     useEffect(() => () => { mountedRef.current = false }, [])
 
@@ -56,8 +58,20 @@ export default function KlineBacktestPanel({ symbol }: Props) {
         || detail?.status === 'pending' || detail?.status === 'running'
 
     const changeForm = (value: KlineBacktestCreateInput) => setForm(value)
-    const reset = () => setForm(createDefaultBacktestInput(normalizedSymbol))
-    const start = () => { void submit({ ...form, symbol: normalizedSymbol }).catch(() => undefined) }
+    const reset = () => setForm(createDefaultBacktestInput(backtestSymbol))
+    const start = () => { void submit({ ...form, symbol: backtestSymbol }).catch(() => undefined) }
+    const selectBacktestSymbol = (raw: string, name?: string) => {
+        const nextSymbol = normalizeBacktestSymbol(raw)
+        if (!nextSymbol || nextSymbol === backtestSymbol) return
+        const nextInstrument = classifyBacktestInstrument(nextSymbol)
+        setBacktestSymbol(nextSymbol)
+        setBacktestName(name)
+        setForm(current => ({
+            ...current,
+            symbol: nextSymbol,
+            fee: defaultBacktestFees(nextInstrument),
+        }))
+    }
 
     return (
         <div className="space-y-4 min-w-0">
@@ -66,7 +80,10 @@ export default function KlineBacktestPanel({ symbol }: Props) {
                 instrument={instrument}
                 errors={errors}
                 disabled={active}
+                analysisSymbol={analysisSymbol}
+                selectedName={backtestName}
                 onChange={changeForm}
+                onSymbolSelect={selectBacktestSymbol}
                 onReset={reset}
                 onSubmit={start}
             />
@@ -91,7 +108,7 @@ export default function KlineBacktestPanel({ symbol }: Props) {
                                 <span className="flex items-center justify-between gap-2"><span className="text-sm font-semibold">{run.start_date} — {run.end_date}</span><span className={STATUS[run.status].className}>{STATUS[run.status].label}</span></span>
                                 <span className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500">
                                     <span className="flex items-center gap-1"><Clock3 size={12} /> {new Date(run.created_at).toLocaleString('zh-CN')}</span>
-                                    {(run.status === 'completed' || run.status === 'failed') && <span role="button" tabIndex={0} className="rounded p-1 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950" onClick={event => { event.stopPropagation(); void deleteRun(run.run_id, normalizedSymbol) }} onKeyDown={() => undefined}><Trash2 size={13} /></span>}
+                                    {(run.status === 'completed' || run.status === 'failed') && <span role="button" tabIndex={0} className="rounded p-1 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950" onClick={event => { event.stopPropagation(); void deleteRun(run.run_id, backtestSymbol) }} onKeyDown={() => undefined}><Trash2 size={13} /></span>}
                                 </span>
                             </button>
                         ))}

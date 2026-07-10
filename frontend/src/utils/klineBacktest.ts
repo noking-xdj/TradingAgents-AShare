@@ -10,8 +10,23 @@ export function previousFullYear(today = new Date()): { start: string; end: stri
     return { start: `${year}-01-01`, end: `${year}-12-31` }
 }
 
+export function normalizeBacktestSymbol(raw: string): string | null {
+    const value = raw.trim().toUpperCase()
+    const match = /^(?:(SH|SZ|BJ))?(\d{6})(?:\.(SH|SZ|BJ|SS))?$/.exec(value)
+    if (!match) return null
+    const code = match[2]
+    let suffix = match[3] ?? match[1]
+    if (suffix === 'SS') suffix = 'SH'
+    if (!suffix) {
+        if (['4', '8'].some(prefix => code.startsWith(prefix)) || code.startsWith('92')) suffix = 'BJ'
+        else if (['5', '6', '9'].some(prefix => code.startsWith(prefix))) suffix = 'SH'
+        else suffix = 'SZ'
+    }
+    return `${code}.${suffix}`
+}
+
 export function classifyBacktestInstrument(symbol: string): KlineBacktestInstrument {
-    const normalized = symbol.trim().toUpperCase()
+    const normalized = normalizeBacktestSymbol(symbol) ?? symbol.trim().toUpperCase()
     const [code, suffix = ''] = normalized.split('.')
     if ((suffix === 'SH' && code.startsWith('000'))
         || (suffix === 'SZ' && code.startsWith('399'))

@@ -1,13 +1,17 @@
 import { RotateCcw, Rocket } from 'lucide-react'
 
 import type { KlineBacktestCreateInput, KlineBacktestInstrument, KlineBacktestStrategy } from '@/types'
+import BacktestSymbolPicker from './BacktestSymbolPicker'
 
 interface Props {
     value: KlineBacktestCreateInput
     instrument: KlineBacktestInstrument
     errors: string[]
     disabled: boolean
+    analysisSymbol: string
+    selectedName?: string
     onChange: (value: KlineBacktestCreateInput) => void
+    onSymbolSelect: (symbol: string, name?: string) => void
     onReset: () => void
     onSubmit: () => void
 }
@@ -25,7 +29,7 @@ const instrumentLabel: Record<KlineBacktestInstrument, string> = {
     index: '指数',
 }
 
-export default function BacktestParameterPanel({ value, instrument, errors, disabled, onChange, onReset, onSubmit }: Props) {
+export default function BacktestParameterPanel({ value, instrument, errors, disabled, analysisSymbol, selectedName, onChange, onSymbolSelect, onReset, onSubmit }: Props) {
     const setNumber = (key: keyof KlineBacktestCreateInput, raw: string) => {
         const numberValue = raw === '' ? 0 : Number(raw)
         onChange({ ...value, [key]: numberValue })
@@ -56,6 +60,15 @@ export default function BacktestParameterPanel({ value, instrument, errors, disa
                     </button>
                 </div>
             </div>
+
+            <BacktestSymbolPicker
+                key={value.symbol}
+                selectedSymbol={value.symbol}
+                selectedName={selectedName}
+                analysisSymbol={analysisSymbol}
+                disabled={disabled}
+                onSelect={onSymbolSelect}
+            />
 
             {instrument === 'index' && (
                 <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
