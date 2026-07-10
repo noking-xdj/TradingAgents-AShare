@@ -68,6 +68,14 @@ export default function BacktestResults({ detail, selectedStrategy, equityByStra
     const pageCount = Math.max(1, Math.ceil(trades.length / pageSize))
     const zeroTradeNeedsExplanation = ['C', 'D'].includes(selectedStrategy) && numeric(metrics.completed_trades) === 0
     const params = detail.params_snapshot
+    const insufficientCashOrders = trades.filter(order => order.order_outcome === 'insufficient_cash').length
+    const noCompletedTradesForCash = insufficientCashOrders > 0 && numeric(metrics.completed_trades) === 0
+    const actualRange = detail.actual_data_range
+    const warmupBars = numeric(actualRange?.warmup_bars as string | number | null | undefined) ?? 0
+    const loadedStart = String(actualRange?.actual_start ?? detail.start_date)
+    const loadedEnd = String(actualRange?.actual_end ?? detail.end_date)
+    const statisticsStart = String(actualRange?.statistics_start ?? detail.start_date)
+    const statisticsEnd = String(actualRange?.statistics_end ?? detail.end_date)
 
     return (
         <div className="space-y-4">
@@ -75,9 +83,11 @@ export default function BacktestResults({ detail, selectedStrategy, equityByStra
                 <div>
                     <h2 className="font-semibold">回测结果 · {detail.symbol}</h2>
                     <p className="mt-1 text-xs text-slate-500">
-                        {detail.actual_data_range ? `实际数据 ${String(detail.actual_data_range.actual_start ?? detail.start_date)} 至 ${String(detail.actual_data_range.actual_end ?? detail.end_date)}` : `${detail.start_date} 至 ${detail.end_date}`}
+                        {actualRange
+                            ? `${warmupBars > 0 ? `加载范围（含 ${warmupBars} 根预热 K 线）` : '数据范围'} ${loadedStart} 至 ${loadedEnd} · 统计区间 ${statisticsStart} 至 ${statisticsEnd}`
+                            : `${detail.start_date} 至 ${detail.end_date}`}
                         {` · ${BACKTEST_DATA_SOURCE_LABELS[detail.params_snapshot.data_source ?? 'eastmoney']}`}
-                        {detail.actual_data_range?.source_api ? `（${String(detail.actual_data_range.source_api)}）` : ''}
+                        {actualRange?.source_api ? `（${String(actualRange.source_api)}）` : ''}
                         {detail.benchmark?.actual_entry_date ? ` · 基准实际建仓 ${detail.benchmark.actual_entry_date}` : ''}
                     </p>
                 </div>
@@ -104,6 +114,18 @@ export default function BacktestResults({ detail, selectedStrategy, equityByStra
                             </div>
                         ))}
                     </div>
+
+                    {noCompletedTradesForCash && (
+                        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                            <div className="flex items-start gap-2">
+                                <AlertTriangle className="mt-0.5 shrink-0" size={17} />
+                                <div>
+                                    <p className="font-semibold">初始资金不足，当前策略未能买入一手</p>
+                                    <p className="mt-1">共有 {insufficientCashOrders} 笔买单因资金不足取消。当前初始资金为 {formatMetric(params.initial_cash, 'money')}；A 股及场内基金按 100 股/份一手成交，请提高初始资金后重新回测。</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     <BacktestPerformanceCharts detail={detail} selectedStrategy={selectedStrategy} equityByStrategy={equityByStrategy} />
                     <BacktestPriceChart

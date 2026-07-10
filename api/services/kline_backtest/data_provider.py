@@ -152,6 +152,23 @@ def _find_column(df: pd.DataFrame, key: str, *, required: bool) -> Optional[str]
     return None
 
 
+def _adapt_source_dataframe(df: pd.DataFrame, source_api: str) -> pd.DataFrame:
+    """Translate provider-specific column semantics before common normalization."""
+    if source_api != "stock_zh_a_hist_tx" or df is None or df.empty:
+        return df
+    if "volume" in df.columns or "amount" not in df.columns:
+        return df
+
+    # AkShare's Tencent endpoint names its sixth field ``amount``, but the
+    # values are trading lots (手), not turnover amount.  Preserve the common
+    # contract in shares and leave turnover amount unknown instead of
+    # contaminating it with volume data.
+    adapted = df.copy()
+    adapted["volume"] = pd.to_numeric(adapted["amount"], errors="coerce") * 100
+    adapted["amount"] = pd.NA
+    return adapted
+
+
 def _decimal(value: Any, field: str) -> Decimal:
     if value is None or pd.isna(value):
         raise ValueError(f"missing numeric field: {field}")
@@ -593,7 +610,7 @@ class AkshareKlineProvider:
             requested_adjust=adjust,
         )
         result = normalize_dataframe(
-            frame,
+            _adapt_source_dataframe(frame, source_api),
             symbol=info.symbol,
             adjust=adjust,
             source_api=source_api,

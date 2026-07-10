@@ -107,6 +107,13 @@ def _english_frame() -> pd.DataFrame:
     ])
 
 
+def _tencent_frame() -> pd.DataFrame:
+    return pd.DataFrame([
+        {"date": "2025-01-02", "open": 10, "high": 11, "low": 9, "close": 10.5, "amount": 100},
+        {"date": "2025-01-03", "open": 10.5, "high": 12, "low": 10, "close": 11.5, "amount": 120},
+    ])
+
+
 def test_normalization_keeps_amount_separate_from_volume_and_hash_is_stable():
     now = datetime(2025, 1, 4, 16, tzinfo=timezone.utc)
     first = normalize_dataframe(
@@ -172,7 +179,11 @@ def test_explicit_stock_source_selects_exactly_one_endpoint(monkeypatch, data_so
     def fetch(name):
         def inner(**kwargs):
             calls.append((name, kwargs))
-            return _english_frame() if name != "stock_zh_a_hist" else _frame()
+            if name == "stock_zh_a_hist":
+                return _frame()
+            if name == "stock_zh_a_hist_tx":
+                return _tencent_frame()
+            return _english_frame()
         return inner
 
     fake_akshare = SimpleNamespace(
@@ -193,11 +204,19 @@ def test_explicit_stock_source_selects_exactly_one_endpoint(monkeypatch, data_so
 
     assert [name for name, _ in calls] == [source_api]
     assert data.source_api == source_api
-    assert data.bars[0].amount == Decimal("1000000")
-    if data_source is not KlineDataSource.EASTMONEY:
+    if data_source is KlineDataSource.TENCENT:
+        assert data.bars[0].volume == Decimal("10000")
+        assert data.bars[0].amount is None
+        assert data.bars[0].turnover_rate is None
+    else:
+        assert data.bars[0].amount == Decimal("1000000")
+    if data_source is KlineDataSource.SINA:
         assert calls[0][1]["symbol"] == "sh600519"
         assert "period" not in calls[0][1]
         assert data.bars[0].turnover_rate == Decimal("0.012")
+    if data_source is KlineDataSource.TENCENT:
+        assert calls[0][1]["symbol"] == "sh600519"
+        assert "period" not in calls[0][1]
 
 
 def test_selected_source_connection_failure_never_silently_falls_back(monkeypatch):
