@@ -12,6 +12,36 @@ export const BACKTEST_DATA_SOURCE_LABELS: Record<KlineBacktestDataSource, string
     tencent: '腾讯财经',
 }
 
+export type BacktestChartLayerKey = 'shortMa' | 'longMa' | 'trendlines' | 'fibonacci' | 'tradeMarkers'
+export type BacktestChartLayers = Record<BacktestChartLayerKey, boolean>
+
+export const COMPACT_BACKTEST_CHART_LAYERS: BacktestChartLayers = {
+    shortMa: true,
+    longMa: true,
+    trendlines: false,
+    fibonacci: false,
+    tradeMarkers: true,
+}
+
+export const ALL_BACKTEST_CHART_LAYERS: BacktestChartLayers = {
+    shortMa: true,
+    longMa: true,
+    trendlines: true,
+    fibonacci: true,
+    tradeMarkers: true,
+}
+
+export function resolveBacktestChartLayers(raw: unknown): BacktestChartLayers {
+    if (!raw || typeof raw !== 'object') return { ...COMPACT_BACKTEST_CHART_LAYERS }
+    const input = raw as Partial<Record<BacktestChartLayerKey, unknown>>
+    return Object.fromEntries(
+        (Object.keys(COMPACT_BACKTEST_CHART_LAYERS) as BacktestChartLayerKey[]).map(key => [
+            key,
+            typeof input[key] === 'boolean' ? input[key] : COMPACT_BACKTEST_CHART_LAYERS[key],
+        ]),
+    ) as BacktestChartLayers
+}
+
 export function previousFullYear(today = new Date()): { start: string; end: string } {
     const year = today.getFullYear() - 1
     return { start: `${year}-01-01`, end: `${year}-12-31` }

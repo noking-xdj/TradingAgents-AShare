@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+    ALL_BACKTEST_CHART_LAYERS,
+    COMPACT_BACKTEST_CHART_LAYERS,
     classifyBacktestInstrument,
     createDefaultBacktestInput,
     defaultBacktestFees,
     normalizeBacktestSymbol,
     previousFullYear,
+    resolveBacktestChartLayers,
     splitEffectiveTrendlines,
     validateBacktestInput,
 } from '@/utils/klineBacktest'
@@ -66,6 +69,23 @@ describe('K-line backtest validation', () => {
         const bse = createDefaultBacktestInput('830799.BJ')
         bse.data_source = 'tencent'
         expect(validateBacktestInput(bse)).toContain('北交所股票暂不支持腾讯数据源')
+    })
+})
+
+describe('backtest chart layer management', () => {
+    it('defaults to a compact chart and accepts persisted boolean overrides only', () => {
+        expect(COMPACT_BACKTEST_CHART_LAYERS).toMatchObject({
+            shortMa: true,
+            longMa: true,
+            trendlines: false,
+            fibonacci: false,
+            tradeMarkers: true,
+        })
+        expect(resolveBacktestChartLayers({ trendlines: true, fibonacci: true, shortMa: 'bad' })).toEqual({
+            ...ALL_BACKTEST_CHART_LAYERS,
+            shortMa: true,
+        })
+        expect(resolveBacktestChartLayers(null)).toEqual(COMPACT_BACKTEST_CHART_LAYERS)
     })
 })
 
