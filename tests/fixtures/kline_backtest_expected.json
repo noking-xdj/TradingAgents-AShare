@@ -1,0 +1,204 @@
+{
+  "benchmark": {
+    "actual_entry_date": "2025-01-04",
+    "equity_points": 15,
+    "equity_sha256": "563858b8d9d65f2768e8ff1eb250b8788245b0c1caa4220fc95ce89f5d42dd59",
+    "metrics": {
+      "commission": "1.11",
+      "completed_trades": 0,
+      "final_asset": "11189.19",
+      "gross_return": "0.12",
+      "max_drawdown": "-0.2649164519739587127709598585",
+      "sharpe": "3.395734517587535",
+      "slippage_cost": "9.60",
+      "stamp_tax": "0",
+      "total_cost": "10.81",
+      "total_return": "0.118919",
+      "transfer_fee": "0.10"
+    }
+  },
+  "data_hash": "b6554a3ca33a1a3693326acc97a393bf489dc63bf84b71eb098e14460607aa3b",
+  "strategies": {
+    "A": {
+      "audit_points": 15,
+      "audit_sha256": "65a0dd3c16dfc1f860679075258e6ab064491f1d40924c5ec6831c44f16e4413",
+      "equity_points": 15,
+      "equity_sha256": "81c800912fd89d587b755fa7737b7ee5a38f96b786f11ba525f9345794d01ec2",
+      "metrics": {
+        "commission": "4.35",
+        "completed_trades": 2,
+        "final_asset": "9948.02",
+        "gross_return": "0.00",
+        "max_drawdown": "-0.1838432798473360100944633050",
+        "sharpe": "0.42852942143809325",
+        "slippage_cost": "37.80",
+        "stamp_tax": "9.45",
+        "total_cost": "51.98",
+        "total_return": "-0.005198",
+        "transfer_fee": "0.38"
+      },
+      "orders": [
+        {
+          "actual_date": "2025-01-07",
+          "cash_after": "88.86",
+          "commission": "1.14",
+          "deferred_days": 0,
+          "exec_price": "9.0090",
+          "order_type": "strategy",
+          "outcome": "executed",
+          "planned_date": "2025-01-07",
+          "position_value_after": "9909.90",
+          "qty": 1100,
+          "realized_pnl": null,
+          "reasons": ["ma_cross_up"],
+          "side": "BUY",
+          "signal_date": "2025-01-06",
+          "slippage_cost": "9.90",
+          "stamp_tax": "0",
+          "strategy_key": "A",
+          "theory_trigger_price": null,
+          "transfer_fee": "0.10",
+          "wave_snapshot": null
+        },
+        {
+          "actual_date": "2025-01-11",
+          "cash_after": "9972.77",
+          "commission": "1.14",
+          "deferred_days": 0,
+          "exec_price": "8.9910",
+          "order_type": "strategy",
+          "outcome": "executed",
+          "planned_date": "2025-01-11",
+          "position_value_after": "0.00",
+          "qty": 1100,
+          "realized_pnl": "-27.23",
+          "reasons": ["ma_cross_down"],
+          "side": "SELL",
+          "signal_date": "2025-01-10",
+          "slippage_cost": "9.90",
+          "stamp_tax": "4.95",
+          "strategy_key": "A",
+          "theory_trigger_price": null,
+          "transfer_fee": "0.10",
+          "wave_snapshot": null
+        },
+        {
+          "actual_date": "2025-01-14",
+          "cash_after": "962.64",
+          "commission": "1.04",
+          "deferred_days": 0,
+          "exec_price": "10.0100",
+          "order_type": "strategy",
+          "outcome": "executed",
+          "planned_date": "2025-01-14",
+          "position_value_after": "9009.00",
+          "qty": 900,
+          "realized_pnl": null,
+          "reasons": ["ma_cross_up"],
+          "side": "BUY",
+          "signal_date": "2025-01-13",
+          "slippage_cost": "9.00",
+          "stamp_tax": "0",
+          "strategy_key": "A",
+          "theory_trigger_price": null,
+          "transfer_fee": "0.09",
+          "wave_snapshot": null
+        },
+        {
+          "actual_date": "2025-01-18",
+          "cash_after": "9948.02",
+          "commission": "1.03",
+          "deferred_days": 0,
+          "exec_price": "9.9900",
+          "order_type": "strategy",
+          "outcome": "executed",
+          "planned_date": "2025-01-18",
+          "position_value_after": "0.00",
+          "qty": 900,
+          "realized_pnl": "-24.75",
+          "reasons": ["ma_cross_down"],
+          "side": "SELL",
+          "signal_date": "2025-01-17",
+          "slippage_cost": "9.00",
+          "stamp_tax": "4.50",
+          "strategy_key": "A",
+          "theory_trigger_price": null,
+          "transfer_fee": "0.09",
+          "wave_snapshot": null
+        }
+      ],
+      "signal_stats": {
+        "buy_signals": 2,
+        "condition_false_days": {"ma_cross_down": 13, "ma_cross_up": 13},
+        "ignored_reasons": {},
+        "order_outcomes": {"executed": 4},
+        "sell_signals": 2
+      }
+    },
+    "B": {
+      "audit_points": 15,
+      "audit_sha256": "ec258b100c2c40b9c19d1df49fd25b5367ffac5cd4c21212591b6f27c504ca48",
+      "equity_points": 15,
+      "equity_sha256": "8d95fd7728d47ae2dbe4e636159d0a69aa4e8edc1943b847023a73e8d239ac10",
+      "metrics": {
+        "commission": "0", "completed_trades": 0, "final_asset": "10000.00",
+        "gross_return": "0.00", "max_drawdown": "0", "sharpe": "0.0",
+        "slippage_cost": "0", "stamp_tax": "0", "total_cost": "0",
+        "total_return": "0.00", "transfer_fee": "0"
+      },
+      "orders": [],
+      "signal_stats": {
+        "buy_signals": 0,
+        "condition_false_days": {
+          "bound_swing_invalid": 15, "fib_rebound": 15, "fib_touched": 15,
+          "ma_bullish": 7, "qualified_swing": 15
+        },
+        "ignored_reasons": {}, "order_outcomes": {}, "sell_signals": 7
+      }
+    },
+    "C": {
+      "audit_points": 15,
+      "audit_sha256": "1b3a6fc0c5f399b6d90b3cbd2f4008f3b29143db8be9a943a7ee12ea085bf5ba",
+      "equity_points": 15,
+      "equity_sha256": "8d95fd7728d47ae2dbe4e636159d0a69aa4e8edc1943b847023a73e8d239ac10",
+      "metrics": {
+        "commission": "0", "completed_trades": 0, "final_asset": "10000.00",
+        "gross_return": "0.00", "max_drawdown": "0", "sharpe": "0.0",
+        "slippage_cost": "0", "stamp_tax": "0", "total_cost": "0",
+        "total_return": "0.00", "transfer_fee": "0"
+      },
+      "orders": [],
+      "signal_stats": {
+        "buy_signals": 0,
+        "condition_false_days": {
+          "ma_bullish": 7, "trendline_broken": 15, "trendline_supported": 15,
+          "valid_trendline": 15
+        },
+        "ignored_reasons": {}, "order_outcomes": {}, "sell_signals": 7
+      }
+    },
+    "D": {
+      "audit_points": 15,
+      "audit_sha256": "72637e41dce75d7d8d0c59d0d4056f6df304301a51214b86ac9876b8f2c5dd20",
+      "equity_points": 15,
+      "equity_sha256": "8d95fd7728d47ae2dbe4e636159d0a69aa4e8edc1943b847023a73e8d239ac10",
+      "metrics": {
+        "commission": "0", "completed_trades": 0, "final_asset": "10000.00",
+        "gross_return": "0.00", "max_drawdown": "0", "sharpe": "0.0",
+        "slippage_cost": "0", "stamp_tax": "0", "total_cost": "0",
+        "total_return": "0.00", "transfer_fee": "0"
+      },
+      "orders": [],
+      "signal_stats": {
+        "buy_signals": 0,
+        "condition_false_days": {
+          "bound_swing_invalid": 15, "fib_rebound": 15, "fib_touched": 15,
+          "ma_bullish": 7, "qualified_swing": 15, "trendline_broken": 15,
+          "trendline_supported": 15, "valid_trendline": 15
+        },
+        "ignored_reasons": {}, "order_outcomes": {}, "sell_signals": 7
+      }
+    }
+  },
+  "symbol": "600519.SH"
+}
