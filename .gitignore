@@ -1,5 +1,6 @@
 # Docs (local design/plan documents)
-docs/
+docs/*
+!docs/KLINE_BACKTEST_REQUIREMENTS.md
 
 # LangGraph Checkpoints
 graph_checkpoints.db
