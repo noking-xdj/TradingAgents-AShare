@@ -1,0 +1,132 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Clock3, Loader2, Trash2 } from 'lucide-react'
+
+import { useKlineBacktestStore } from '@/stores/klineBacktestStore'
+import type { KlineBacktestCreateInput, KlineBacktestStatus } from '@/types'
+import { classifyBacktestInstrument, createDefaultBacktestInput, validateBacktestInput } from '@/utils/klineBacktest'
+import BacktestParameterPanel from './BacktestParameterPanel'
+import BacktestResults from './BacktestResults'
+
+interface Props { symbol: string }
+
+const STATUS: Record<KlineBacktestStatus, { label: string; className: string }> = {
+    pending: { label: '排队中', className: 'badge-orange' },
+    running: { label: '运行中', className: 'badge-blue' },
+    completed: { label: '已完成', className: 'badge-green' },
+    failed: { label: '失败', className: 'badge-red' },
+}
+
+export default function KlineBacktestPanel({ symbol }: Props) {
+    const normalizedSymbol = symbol.trim().toUpperCase()
+    const instrument = classifyBacktestInstrument(normalizedSymbol)
+    const [form, setForm] = useState<KlineBacktestCreateInput>(() => createDefaultBacktestInput(normalizedSymbol))
+    const mountedRef = useRef(true)
+    const {
+        history, selectedRunId, selectedStrategy, detail, trades, signals, equityByStrategy, candles,
+        historyLoading, detailLoading, resultLoading, submitting, error,
+        loadHistory, selectRun, refreshSelectedRun, loadCompletedData, selectStrategy, submit, deleteRun,
+    } = useKlineBacktestStore()
+
+    useEffect(() => {
+        void loadHistory(normalizedSymbol)
+    }, [loadHistory, normalizedSymbol])
+
+    useEffect(() => () => { mountedRef.current = false }, [])
+
+    useEffect(() => {
+        if (!detail || (detail.status !== 'pending' && detail.status !== 'running')) return
+        const runId = detail.run_id
+        const timer = window.setInterval(() => {
+            void refreshSelectedRun().then(next => {
+                const currentRunId = useKlineBacktestStore.getState().selectedRunId
+                if (!mountedRef.current || currentRunId !== runId || !next || next.run_id !== runId) return
+                if (next.status === 'completed') {
+                    window.clearInterval(timer)
+                    void loadCompletedData(next)
+                }
+            })
+        }, 1500)
+        return () => {
+            window.clearInterval(timer)
+        }
+    }, [detail, loadCompletedData, refreshSelectedRun])
+
+    const errors = useMemo(() => validateBacktestInput(form), [form])
+    const active = submitting || history.some(run => run.status === 'pending' || run.status === 'running')
+        || detail?.status === 'pending' || detail?.status === 'running'
+
+    const changeForm = (value: KlineBacktestCreateInput) => setForm(value)
+    const reset = () => setForm(createDefaultBacktestInput(normalizedSymbol))
+    const start = () => { void submit({ ...form, symbol: normalizedSymbol }).catch(() => undefined) }
+
+    return (
+        <div className="space-y-4 min-w-0">
+            <BacktestParameterPanel
+                value={form}
+                instrument={instrument}
+                errors={errors}
+                disabled={active}
+                onChange={changeForm}
+                onReset={reset}
+                onSubmit={start}
+            />
+
+            <section className="card min-w-0">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h2 className="font-semibold">历史回测</h2>
+                        <p className="mt-1 text-xs text-slate-500">刷新页面后从服务端历史恢复，可切换查看已完成 run</p>
+                    </div>
+                    {historyLoading && <Loader2 size={17} className="animate-spin text-slate-400" />}
+                </div>
+                <div className="mt-3 overflow-x-auto">
+                    <div className="flex min-w-max gap-2 pb-1">
+                        {history.map(run => (
+                            <button
+                                key={run.run_id}
+                                type="button"
+                                onClick={() => void selectRun(run.run_id)}
+                                className={`min-w-[235px] rounded-lg border p-3 text-left transition ${selectedRunId === run.run_id ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30' : 'border-slate-200 hover:border-slate-400 dark:border-slate-700'}`}
+                            >
+                                <span className="flex items-center justify-between gap-2"><span className="text-sm font-semibold">{run.start_date} — {run.end_date}</span><span className={STATUS[run.status].className}>{STATUS[run.status].label}</span></span>
+                                <span className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500">
+                                    <span className="flex items-center gap-1"><Clock3 size={12} /> {new Date(run.created_at).toLocaleString('zh-CN')}</span>
+                                    {(run.status === 'completed' || run.status === 'failed') && <span role="button" tabIndex={0} className="rounded p-1 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950" onClick={event => { event.stopPropagation(); void deleteRun(run.run_id, normalizedSymbol) }} onKeyDown={() => undefined}><Trash2 size={13} /></span>}
+                                </span>
+                            </button>
+                        ))}
+                        {!historyLoading && history.length === 0 && <p className="py-3 text-sm text-slate-500">当前标的还没有回测记录</p>}
+                    </div>
+                </div>
+            </section>
+
+            {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">{error}</div>}
+
+            {detailLoading && <div className="card flex items-center justify-center gap-2 py-12 text-sm text-slate-500"><Loader2 className="animate-spin" size={18} /> 正在读取回测任务...</div>}
+
+            {!detailLoading && detail && (detail.status === 'pending' || detail.status === 'running') && (
+                <div className="card flex items-center gap-3 py-8">
+                    <Loader2 className="animate-spin text-blue-500" size={24} />
+                    <div><p className="font-semibold">{detail.status === 'pending' ? '任务已进入专用队列' : '正在计算交易信号与账户净值'}</p><p className="mt-1 text-sm text-slate-500">当前状态：{STATUS[detail.status].label}。页面会自动刷新，期间已禁用重复提交。</p></div>
+                </div>
+            )}
+
+            {!detailLoading && detail?.status === 'failed' && (
+                <div className="card border-red-200 dark:border-red-900"><h3 className="font-semibold text-red-600">回测失败 · {detail.error_code ?? 'unknown'}</h3><p className="mt-2 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">{detail.error ?? '未返回错误详情'}</p></div>
+            )}
+
+            {!detailLoading && detail?.status === 'completed' && (
+                <BacktestResults
+                    detail={detail}
+                    selectedStrategy={selectedStrategy}
+                    equityByStrategy={equityByStrategy}
+                    trades={trades}
+                    signals={signals}
+                    candles={candles}
+                    loading={resultLoading}
+                    onStrategyChange={strategy => void selectStrategy(strategy)}
+                />
+            )}
+        </div>
+    )
+}

@@ -8,6 +8,7 @@ import KlinePanel from '@/components/KlinePanel'
 import DecisionCard from '@/components/DecisionCard'
 import RiskRadar from '@/components/RiskRadar'
 import KeyMetrics from '@/components/KeyMetrics'
+import KlineBacktestPanel from '@/components/backtest/KlineBacktestPanel'
 import { useAnalysisStore } from '@/stores/analysisStore'
 
 function mapDecision(decision?: string): 'buy' | 'sell' | 'hold' | 'add' | 'reduce' | 'watch' | undefined {
@@ -50,6 +51,7 @@ export default function Analysis() {
     const [activeSymbol, setActiveSymbol] = useState(() => querySymbol || useAnalysisStore.getState().currentSymbol || '000001.SH')
     const [activeSection, setActiveSection] = useState<string | undefined>()
     const [debateDrawer, setDebateDrawer] = useState<'research' | 'risk' | null>(null)
+    const [workspaceTab, setWorkspaceTab] = useState<'analysis' | 'backtest'>('analysis')
     const reportRef = useRef<HTMLDivElement | null>(null)
     const {
         report,
@@ -63,8 +65,9 @@ export default function Analysis() {
     } = useAnalysisStore()
 
     const handleShowReport = (section?: string) => {
+        setWorkspaceTab('analysis')
         setActiveSection(section)
-        reportRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        window.setTimeout(() => reportRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
     }
 
     const initialChatInput = querySymbol ? `分析 ${querySymbol} 今日走势` : undefined
@@ -74,10 +77,10 @@ export default function Analysis() {
     }, [querySymbol])
 
     useEffect(() => {
-        if (currentSymbol) {
+        if (currentSymbol && !querySymbol) {
             setActiveSymbol(currentSymbol)
         }
-    }, [currentSymbol])
+    }, [currentSymbol, querySymbol])
 
     const finalDecision = report?.final_trade_decision
     const confidence = jobConfidence ?? extractConfidence(finalDecision)
@@ -86,8 +89,8 @@ export default function Analysis() {
 
     return (
         <div className="space-y-4">
-            <div className="grid grid-cols-[340px_minmax(0,1fr)] gap-4 min-h-[calc(100vh-5rem)]">
-                <aside className="h-[calc(100vh-5rem)] sticky top-0 flex flex-col gap-4">
+            <div className="grid grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)] gap-4 min-h-[calc(100vh-5rem)]">
+                <aside className="h-[72vh] xl:h-[calc(100vh-5rem)] xl:sticky xl:top-0 flex flex-col gap-4">
                     <div className="min-h-0 flex-1">
                         <ChatCopilotPanel
                             onSymbolDetected={(symbol) => {
@@ -101,35 +104,46 @@ export default function Analysis() {
                 </aside>
 
                 <div className="min-w-0 space-y-4">
-                    <div className="h-[360px]">
-                        <KlinePanel
-                            symbol={activeSymbol}
-                            onSymbolChange={(symbol) => {
-                                setActiveSymbol(symbol)
-                            }}
-                        />
-                    </div>
+                    <nav className="card flex gap-2 p-2" aria-label="分析工作区">
+                        <button type="button" className={workspaceTab === 'analysis' ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => setWorkspaceTab('analysis')}>智能分析</button>
+                        <button type="button" className={workspaceTab === 'backtest' ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => setWorkspaceTab('backtest')}>K 线回测</button>
+                    </nav>
 
-                    <AgentCollaboration onSelectSection={handleShowReport} onOpenDebate={setDebateDrawer} selectedSection={activeSection} />
+                    {workspaceTab === 'analysis' ? (
+                        <>
+                            <div className="h-[360px]">
+                                <KlinePanel
+                                    symbol={activeSymbol}
+                                    onSymbolChange={(symbol) => {
+                                        setActiveSymbol(symbol)
+                                    }}
+                                />
+                            </div>
 
-                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                        <DecisionCard
-                            symbol={activeSymbol}
-                            report={report || undefined}
-                            decision={mapDecision(report?.decision)}
-                            direction={report?.direction}
-                            confidence={confidence}
-                            targetPrice={targetPrice}
-                            stopLoss={stopLoss}
-                            reasoning={finalDecision?.slice(0, 300)}
-                        />
-                        <RiskRadar items={riskItems} />
-                        <KeyMetrics items={keyMetrics} />
-                    </div>
+                            <AgentCollaboration onSelectSection={handleShowReport} onOpenDebate={setDebateDrawer} selectedSection={activeSection} />
 
-                    <div ref={reportRef}>
-                        <ReportViewer activeSection={activeSection} />
-                    </div>
+                            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                                <DecisionCard
+                                    symbol={activeSymbol}
+                                    report={report || undefined}
+                                    decision={mapDecision(report?.decision)}
+                                    direction={report?.direction}
+                                    confidence={confidence}
+                                    targetPrice={targetPrice}
+                                    stopLoss={stopLoss}
+                                    reasoning={finalDecision?.slice(0, 300)}
+                                />
+                                <RiskRadar items={riskItems} />
+                                <KeyMetrics items={keyMetrics} />
+                            </div>
+
+                            <div ref={reportRef}>
+                                <ReportViewer activeSection={activeSection} />
+                            </div>
+                        </>
+                    ) : (
+                        <KlineBacktestPanel key={activeSymbol} symbol={activeSymbol} />
+                    )}
                 </div>
             </div>
 

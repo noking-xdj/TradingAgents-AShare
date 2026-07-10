@@ -305,6 +305,169 @@ export interface KlineResponse {
     candles: KlineCandle[]
 }
 
+// Deterministic K-line backtest
+export type KlineBacktestStatus = 'pending' | 'running' | 'completed' | 'failed'
+export type KlineBacktestStrategy = 'A' | 'B' | 'C' | 'D'
+export type KlineBacktestInstrument = 'stock' | 'fund' | 'index'
+
+export interface KlineBacktestFeeInput {
+    commission_rate: number
+    minimum_commission: number
+    stamp_tax_rate: number
+    transfer_fee_rate: number
+    buy_slippage_rate: number
+    sell_slippage_rate: number
+}
+
+export interface KlineBacktestCreateInput {
+    symbol: string
+    start_date: string
+    end_date: string
+    strategy_keys: KlineBacktestStrategy[]
+    adjust: 'qfq' | 'hfq' | 'none' | 'raw'
+    force_refresh: boolean
+    initial_cash: number
+    max_position_ratio: number
+    short_ma: number
+    long_ma: number
+    pivot_left: number
+    pivot_right: number
+    fib_window: number
+    fib_tolerance: number
+    fib_min_amplitude: number
+    fib_mode: 'discrete' | 'zone'
+    trend_tolerance: number
+    trend_break_threshold: number
+    trend_min_touches: number
+    pivot_min_separation: number
+    stop_loss: number | null
+    take_profit: number | null
+    max_deferred_days: number
+    risk_free_rate: number
+    annual_trading_days: number
+    fee: KlineBacktestFeeInput
+}
+
+export interface KlineBacktestRun {
+    run_id: string
+    symbol: string
+    instrument_type: KlineBacktestInstrument
+    start_date: string
+    end_date: string
+    status: KlineBacktestStatus
+    params_snapshot: KlineBacktestCreateInput
+    fee_snapshot: Record<string, string>
+    data_hash: string | null
+    actual_data_range: Record<string, unknown> | null
+    cache_version: string | null
+    error_code: string | null
+    error: string | null
+    created_at: string
+    started_at: string | null
+    finished_at: string | null
+}
+
+export interface KlineBacktestStrategyResult {
+    metrics: Record<string, string | number | null>
+    signal_stats: {
+        buy_signals?: number
+        sell_signals?: number
+        condition_false_days?: Record<string, number>
+        ignored_reasons?: Record<string, number>
+        order_outcomes?: Record<string, number>
+    }
+    open_position: Record<string, unknown> | null
+}
+
+export interface KlineBacktestDetail extends KlineBacktestRun {
+    strategies: Partial<Record<KlineBacktestStrategy, KlineBacktestStrategyResult>>
+    benchmark: {
+        metrics: Record<string, string | number | null>
+        actual_entry_date: string | null
+    } | null
+}
+
+export interface KlineBacktestTrade {
+    id: number
+    strategy_key: KlineBacktestStrategy
+    signal_date: string
+    planned_date: string | null
+    actual_date: string | null
+    order_type: 'strategy' | 'risk_exit' | string
+    side: 'BUY' | 'SELL'
+    theory_trigger_price: string | null
+    exec_price: string | null
+    qty: number
+    commission: string | null
+    stamp_tax: string | null
+    transfer_fee: string | null
+    slippage_cost: string | null
+    realized_pnl: string | null
+    trigger_reason: string[]
+    order_outcome: string
+    deferred_days: number
+    wave_snapshot: Record<string, unknown> | null
+    cash_after: string | null
+    position_value_after: string | null
+}
+
+export interface KlineBacktestEquityPoint {
+    strategy_key: KlineBacktestStrategy | 'BENCHMARK'
+    date: string
+    cash?: string
+    position_value?: string
+    total: string | null
+    drawdown: string | null
+}
+
+export interface KlineBacktestPivot {
+    kind: 'high' | 'low'
+    index: number
+    date: string
+    price: string
+    confirmed_index: number
+    confirmed_at: string
+}
+
+export interface KlineBacktestSignal {
+    id: number
+    strategy_key: KlineBacktestStrategy
+    date: string
+    ma_values: {
+        short: string | null
+        long: string | null
+        cross_up: boolean
+        cross_down: boolean
+    }
+    visible_pivots: KlineBacktestPivot[]
+    fib_levels: Record<string, string> | null
+    swing_amplitude: string | null
+    trendline_price: string | null
+    touch_count: number
+    decision: {
+        decision?: {
+            buy?: boolean
+            sell?: boolean
+            buy_reasons?: string[]
+            sell_reasons?: string[]
+            conditions?: Record<string, boolean>
+        }
+        ignored_reason?: string | null
+        fib_touched?: boolean
+        fib_rebound?: boolean
+        touched_levels?: string[]
+        trendline_broken?: boolean
+    }
+}
+
+export interface KlineBacktestPage<T> {
+    run_id?: string
+    items: T[]
+    total: number
+    offset: number
+    limit: number
+}
+
 // Structured extraction types
 export interface RiskItem {
     name: string

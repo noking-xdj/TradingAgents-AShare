@@ -1,0 +1,174 @@
+import { useMemo, useState } from 'react'
+import { AlertTriangle, Loader2 } from 'lucide-react'
+
+import type {
+    KlineBacktestDetail,
+    KlineBacktestEquityPoint,
+    KlineBacktestSignal,
+    KlineBacktestStrategy,
+    KlineBacktestTrade,
+    KlineCandle,
+} from '@/types'
+import BacktestPerformanceCharts from './BacktestPerformanceCharts'
+import BacktestPriceChart from './BacktestPriceChart'
+
+interface Props {
+    detail: KlineBacktestDetail
+    selectedStrategy: KlineBacktestStrategy
+    equityByStrategy: Partial<Record<KlineBacktestStrategy | 'BENCHMARK', KlineBacktestEquityPoint[]>>
+    trades: KlineBacktestTrade[]
+    signals: KlineBacktestSignal[]
+    candles: KlineCandle[]
+    loading: boolean
+    onStrategyChange: (strategy: KlineBacktestStrategy) => void
+}
+
+const METRICS: Array<{ key: string; label: string; format: 'money' | 'percent' | 'number' | 'ratio' }> = [
+    { key: 'final_asset', label: '期末资产', format: 'money' },
+    { key: 'total_return', label: '净收益率', format: 'percent' },
+    { key: 'annualized_return', label: '年化收益率', format: 'percent' },
+    { key: 'max_drawdown', label: '最大回撤', format: 'percent' },
+    { key: 'sharpe', label: '夏普比率', format: 'ratio' },
+    { key: 'completed_trades', label: '完整交易', format: 'number' },
+    { key: 'win_rate', label: '胜率', format: 'percent' },
+    { key: 'total_cost', label: '总成本', format: 'money' },
+]
+
+function numeric(value: string | number | null | undefined): number | null {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+}
+
+function formatMetric(value: string | number | null | undefined, format: 'money' | 'percent' | 'number' | 'ratio'): string {
+    const parsed = numeric(value)
+    if (parsed == null) return '--'
+    if (format === 'money') return `¥${parsed.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`
+    if (format === 'percent') return `${(parsed * 100).toFixed(2)}%`
+    if (format === 'number') return String(Math.round(parsed))
+    return parsed.toFixed(2)
+}
+
+const CONDITION_LABELS: Record<string, string> = {
+    ma_cross_up: '均线金叉', ma_cross_down: '均线死叉', ma_bullish: '均线多头', ma_bearish: '均线空头',
+    qualified_swing: '合格上升波段', bound_swing_invalid: '绑定波段失效', fib_touched: '触及斐波位',
+    fib_rebound: '斐波反弹确认', valid_trendline: '有效趋势线', trendline_supported: '趋势线支撑',
+    trendline_broken: '趋势线跌破',
+}
+
+export default function BacktestResults({ detail, selectedStrategy, equityByStrategy, trades, signals, candles, loading, onStrategyChange }: Props) {
+    const [tradePage, setTradePage] = useState(0)
+    const pageSize = 20
+    const strategies = Object.keys(detail.strategies) as KlineBacktestStrategy[]
+    const selected = detail.strategies[selectedStrategy]
+    const metrics = selected?.metrics ?? {}
+    const falseConditions = Object.entries(selected?.signal_stats.condition_false_days ?? {}).sort((a, b) => b[1] - a[1])
+    const maxFalse = Math.max(1, ...falseConditions.map(item => item[1]))
+    const pagedTrades = useMemo(() => trades.slice(tradePage * pageSize, (tradePage + 1) * pageSize), [tradePage, trades])
+    const pageCount = Math.max(1, Math.ceil(trades.length / pageSize))
+    const zeroTradeNeedsExplanation = ['C', 'D'].includes(selectedStrategy) && numeric(metrics.completed_trades) === 0
+    const params = detail.params_snapshot
+
+    return (
+        <div className="space-y-4">
+            <section className="card flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 className="font-semibold">回测结果 · {detail.symbol}</h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                        {detail.actual_data_range ? `实际数据 ${String(detail.actual_data_range.start_date ?? detail.start_date)} 至 ${String(detail.actual_data_range.end_date ?? detail.end_date)}` : `${detail.start_date} 至 ${detail.end_date}`}
+                        {detail.benchmark?.actual_entry_date ? ` · 基准实际建仓 ${detail.benchmark.actual_entry_date}` : ''}
+                    </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    {strategies.map(key => (
+                        <button key={key} type="button" className={key === selectedStrategy ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => { setTradePage(0); onStrategyChange(key) }}>
+                            策略 {key}
+                        </button>
+                    ))}
+                </div>
+            </section>
+
+            {loading && (
+                <div className="card flex items-center justify-center gap-2 py-12 text-sm text-slate-500"><Loader2 className="animate-spin" size={18} /> 正在加载完整结果...</div>
+            )}
+
+            {!loading && selected && (
+                <>
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 2xl:grid-cols-8">
+                        {METRICS.map(item => (
+                            <div key={item.key} className="card min-w-0">
+                                <p className="text-xs text-slate-500">{item.label}</p>
+                                <p className="mt-2 truncate text-lg font-semibold">{formatMetric(metrics[item.key], item.format)}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    <BacktestPerformanceCharts detail={detail} selectedStrategy={selectedStrategy} equityByStrategy={equityByStrategy} />
+                    <BacktestPriceChart
+                        candles={candles}
+                        signals={signals}
+                        trades={trades}
+                        shortMa={params.short_ma}
+                        longMa={params.long_ma}
+                        trendMinTouches={params.trend_min_touches}
+                    />
+
+                    <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+                        <section className="card min-w-0">
+                            <h3 className="font-semibold">多策略对比</h3>
+                            <div className="mt-3 overflow-x-auto">
+                                <table className="w-full min-w-[720px] text-left text-sm">
+                                    <thead className="text-xs text-slate-500"><tr><th className="py-2">策略</th><th>净收益</th><th>最大回撤</th><th>夏普</th><th>完整交易</th><th>胜率</th><th>总成本</th></tr></thead>
+                                    <tbody>
+                                        {strategies.map(key => {
+                                            const row = detail.strategies[key]?.metrics ?? {}
+                                            return <tr key={key} className="border-t border-slate-100 dark:border-slate-700"><td className="py-2 font-semibold">{key}</td><td>{formatMetric(row.total_return, 'percent')}</td><td>{formatMetric(row.max_drawdown, 'percent')}</td><td>{formatMetric(row.sharpe, 'ratio')}</td><td>{formatMetric(row.completed_trades, 'number')}</td><td>{formatMetric(row.win_rate, 'percent')}</td><td>{formatMetric(row.total_cost, 'money')}</td></tr>
+                                        })}
+                                        {detail.benchmark && <tr className="border-t border-slate-100 text-slate-500 dark:border-slate-700"><td className="py-2 font-semibold">买入持有</td><td>{formatMetric(detail.benchmark.metrics.total_return, 'percent')}</td><td>{formatMetric(detail.benchmark.metrics.max_drawdown, 'percent')}</td><td>{formatMetric(detail.benchmark.metrics.sharpe, 'ratio')}</td><td>--</td><td>--</td><td>{formatMetric(detail.benchmark.metrics.total_cost, 'money')}</td></tr>}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+
+                        <section className="card min-w-0">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div><h3 className="font-semibold">信号审计</h3><p className="mt-1 text-xs text-slate-500">买入 {selected.signal_stats.buy_signals ?? 0} 次 · 卖出 {selected.signal_stats.sell_signals ?? 0} 次</p></div>
+                                {zeroTradeNeedsExplanation && <span className="badge-orange flex items-center gap-1"><AlertTriangle size={13} /> 零交易原因</span>}
+                            </div>
+                            <div className="mt-4 space-y-3">
+                                {falseConditions.length === 0 && <p className="text-sm text-slate-500">没有条件未满足记录</p>}
+                                {falseConditions.map(([key, count]) => (
+                                    <div key={key}>
+                                        <div className="mb-1 flex justify-between gap-3 text-xs"><span>{CONDITION_LABELS[key] ?? key}</span><span className="text-slate-500">未满足 {count} 日</span></div>
+                                        <div className="h-2 overflow-hidden rounded bg-slate-100 dark:bg-slate-700"><div className="h-full rounded bg-amber-500" style={{ width: `${Math.max(3, count / maxFalse * 100)}%` }} /></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    </div>
+
+                    <section className="card min-w-0">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div><h3 className="font-semibold">订单与交易明细</h3><p className="mt-1 text-xs text-slate-500">记录全部订单生命周期，含成交、顺延、取消、超期及期末取消</p></div>
+                            <span className="text-xs text-slate-500">共 {trades.length} 笔订单</span>
+                        </div>
+                        <div className="mt-3 overflow-x-auto">
+                            <table className="w-full min-w-[1180px] text-left text-xs">
+                                <thead className="text-slate-500"><tr><th className="py-2">策略</th><th>信号日</th><th>计划日</th><th>实际日</th><th>类型</th><th>方向</th><th>状态</th><th>成交价</th><th>数量</th><th>顺延</th><th>触发/未成交原因</th><th>费用</th><th>已实现盈亏</th></tr></thead>
+                                <tbody>{pagedTrades.map(order => {
+                                    const fee = ['commission', 'stamp_tax', 'transfer_fee', 'slippage_cost'].reduce((sum, key) => sum + numberFromOrder(order, key), 0)
+                                    return <tr key={order.id} className="border-t border-slate-100 dark:border-slate-700"><td className="py-2 font-semibold">{order.strategy_key}</td><td>{order.signal_date}</td><td>{order.planned_date ?? '--'}</td><td>{order.actual_date ?? '--'}</td><td>{order.order_type === 'risk_exit' ? '风险退出' : '策略信号'}</td><td className={order.side === 'BUY' ? 'text-red-500' : 'text-green-500'}>{order.side === 'BUY' ? '买入' : '卖出'}</td><td>{order.order_outcome}</td><td>{order.exec_price ?? '--'}</td><td>{order.qty}</td><td>{order.deferred_days} 日</td><td className="max-w-[240px] whitespace-normal">{order.trigger_reason.join('、') || '--'}</td><td>¥{fee.toFixed(2)}</td><td>{order.realized_pnl == null ? '--' : `¥${Number(order.realized_pnl).toFixed(2)}`}</td></tr>
+                                })}</tbody>
+                            </table>
+                        </div>
+                        {trades.length === 0 && <div className="py-8 text-center text-sm text-slate-500">该策略没有生成订单；请结合上方条件未满足分布审计</div>}
+                        {trades.length > pageSize && <div className="mt-3 flex items-center justify-end gap-2 text-sm"><button className="btn-secondary" disabled={tradePage === 0} onClick={() => setTradePage(page => page - 1)}>上一页</button><span>{tradePage + 1} / {pageCount}</span><button className="btn-secondary" disabled={tradePage + 1 >= pageCount} onClick={() => setTradePage(page => page + 1)}>下一页</button></div>}
+                    </section>
+                </>
+            )}
+        </div>
+    )
+}
+
+function numberFromOrder(order: KlineBacktestTrade, key: string): number {
+    return numeric(order[key as keyof KlineBacktestTrade] as string | number | null | undefined) ?? 0
+}

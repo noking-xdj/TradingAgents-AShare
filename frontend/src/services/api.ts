@@ -1,4 +1,4 @@
-import type { AnalysisRequest, AnalysisResponse, Announcement, AuthUser, AuthVerifyResponse, JobStatus, AnalysisReport, KlineResponse, LatestAnnouncementResponse, PortfolioImportState, PortfolioOverviewResponse, PortfolioPositionInput, Report, ReportDetail, ReportListResponse, RuntimeConfig, RuntimeConfigUpdate, RuntimeConfigUpdateResponse, RuntimeWarmupRequest, RuntimeWarmupResponse, WatchlistItem, WatchlistBatchResponse, ScheduledAnalysis, ScheduledBatchTriggerResponse, StockSearchResult, TrackingBoardResponse, UserToken, UserTokenCreateRequest, WecomWarmupRequest, WecomWarmupResponse, FeedbackItem, FeedbackListResponse, FeedbackUnreadResponse } from '@/types'
+import type { AnalysisRequest, AnalysisResponse, Announcement, AuthUser, AuthVerifyResponse, JobStatus, AnalysisReport, KlineResponse, KlineBacktestCreateInput, KlineBacktestDetail, KlineBacktestEquityPoint, KlineBacktestPage, KlineBacktestRun, KlineBacktestSignal, KlineBacktestStrategy, KlineBacktestTrade, LatestAnnouncementResponse, PortfolioImportState, PortfolioOverviewResponse, PortfolioPositionInput, Report, ReportDetail, ReportListResponse, RuntimeConfig, RuntimeConfigUpdate, RuntimeConfigUpdateResponse, RuntimeWarmupRequest, RuntimeWarmupResponse, WatchlistItem, WatchlistBatchResponse, ScheduledAnalysis, ScheduledBatchTriggerResponse, StockSearchResult, TrackingBoardResponse, UserToken, UserTokenCreateRequest, WecomWarmupRequest, WecomWarmupResponse, FeedbackItem, FeedbackListResponse, FeedbackUnreadResponse } from '@/types'
 
 export function getBaseUrl(): string {
     const envUrl = (import.meta.env.VITE_API_URL as string) || ''
@@ -80,6 +80,60 @@ class ApiService {
         if (startDate) params.append('start_date', startDate)
         if (endDate) params.append('end_date', endDate)
         return this.request<KlineResponse>(`/v1/market/kline?${params}`)
+    }
+
+    async createKlineBacktest(input: KlineBacktestCreateInput): Promise<{ run_id: string; status: 'pending' }> {
+        return this.request('/v1/kline-backtests', {
+            method: 'POST',
+            body: JSON.stringify(input),
+        })
+    }
+
+    async listKlineBacktests(symbol?: string, offset = 0, limit = 50): Promise<KlineBacktestPage<KlineBacktestRun>> {
+        const params = new URLSearchParams({ offset: String(offset), limit: String(limit) })
+        if (symbol) params.set('symbol', symbol)
+        return this.request(`/v1/kline-backtests?${params}`)
+    }
+
+    async getKlineBacktest(runId: string): Promise<KlineBacktestDetail> {
+        return this.request(`/v1/kline-backtests/${runId}`)
+    }
+
+    async deleteKlineBacktest(runId: string): Promise<{ deleted: boolean; run_id: string }> {
+        return this.request(`/v1/kline-backtests/${runId}`, { method: 'DELETE' })
+    }
+
+    async getKlineBacktestTrades(
+        runId: string,
+        strategy?: KlineBacktestStrategy,
+        offset = 0,
+        limit = 200,
+    ): Promise<KlineBacktestPage<KlineBacktestTrade>> {
+        const params = new URLSearchParams({ offset: String(offset), limit: String(limit) })
+        if (strategy) params.set('strategy', strategy)
+        return this.request(`/v1/kline-backtests/${runId}/trades?${params}`)
+    }
+
+    async getKlineBacktestEquity(
+        runId: string,
+        strategy?: KlineBacktestStrategy | 'BENCHMARK',
+        offset = 0,
+        limit = 500,
+    ): Promise<KlineBacktestPage<KlineBacktestEquityPoint>> {
+        const params = new URLSearchParams({ offset: String(offset), limit: String(limit) })
+        if (strategy) params.set('strategy', strategy)
+        return this.request(`/v1/kline-backtests/${runId}/equity?${params}`)
+    }
+
+    async getKlineBacktestSignals(
+        runId: string,
+        strategy?: KlineBacktestStrategy,
+        offset = 0,
+        limit = 500,
+    ): Promise<KlineBacktestPage<KlineBacktestSignal>> {
+        const params = new URLSearchParams({ offset: String(offset), limit: String(limit) })
+        if (strategy) params.set('strategy', strategy)
+        return this.request(`/v1/kline-backtests/${runId}/signals?${params}`)
     }
 
     async chatCompletion(
