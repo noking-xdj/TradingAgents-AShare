@@ -3,14 +3,15 @@
 ## 1. 基线信息
 
 - 建立日期：2026-07-10
-- 产品代码基准提交：`ce932af`
+- 阶段 6 起点提交：`29fd2a7`
+- 当前基线：本文所在的阶段 6 提交
 - 分支：`codex/local-fixes`
 - 运行环境：Docker `tradingagents-ashare:local`
 - Python：3.10.19
 - pytest：9.0.2
 - Redis：未在隔离测试容器中启动
 
-本基线只修改测试和测试夹具，不修改 `api/`、`scheduler/`、`frontend/` 或 K 线回测模块。`tests/conftest.py` 在 pytest 导入应用数据库模块之前，将 `DATABASE_URL` 指向每次测试进程新建的临时 SQLite 文件；session 开始时执行 `init_db()`，结束后关闭 engine 并删除临时目录。测试不再读取或污染工作区及部署数据库。
+`tests/conftest.py` 在 pytest 导入应用数据库模块之前，将 `DATABASE_URL` 指向每次测试进程新建的临时 SQLite 文件；session 开始时执行 `init_db()`，结束后关闭 engine 并删除临时目录。测试不读取或污染工作区及部署数据库。阶段 6 在此基础上接入 K 线回测 API、持久化、专用任务队列和 app-only 孤儿恢复。
 
 ## 2. 可重复运行命令
 
@@ -28,7 +29,8 @@ python -m pytest -q -p no:cacheprovider \
   tests/test_kline_backtest_indicators.py \
   tests/test_kline_backtest_engine.py \
   tests/test_kline_backtest_strategies.py \
-  tests/test_kline_backtest_golden.py
+  tests/test_kline_backtest_golden.py \
+  tests/test_kline_backtest_stage6.py
 ```
 
 鉴权安全网定点检查：
@@ -44,13 +46,13 @@ python -m pytest -vv -p no:cacheprovider \
 ### 3.1 全仓测试
 
 ```text
-218 collected
-207 passed
+226 collected
+215 passed
 0 failed
 11 skipped
 0 errors
-63 warnings
-completed in 15.97s
+71 warnings
+completed in 14.12s
 ```
 
 pytest 正常运行到 100% 并退出，不再卡在 `tests/test_scheduled_queue.py`。
@@ -58,10 +60,10 @@ pytest 正常运行到 100% 并退出，不再卡在 `tests/test_scheduled_queue
 ### 3.2 K 线回测专项
 
 ```text
-32 passed in 1.13s
+40 passed in 1.27s
 ```
 
-Golden-file 和“全年无有效线/无合格波段”零交易夹具均包含在这 32 项内。
+Golden-file、“全年无有效线/无合格波段”零交易夹具，以及阶段 6 的 API、状态机、持久化、权限、删除、专用队列和孤儿恢复 e2e 均包含在这 40 项内。
 
 ### 3.3 鉴权断言
 
@@ -115,6 +117,8 @@ TestChatCompletionsEndpoint::test_requires_auth PASSED
 - 持仓导入测试的内存 SQLite 使用 `StaticPool` 与 `check_same_thread=False`，匹配调度器的 `asyncio.to_thread` 执行方式。
 - 股票名称缓存测试同时保存、设置并恢复 `_cn_stock_map` 与 `_cn_stock_reverse_map`，不再依赖测试顺序或预热状态。
 - 意图解析、horizon context 和孤儿报告恢复的 5 项过期断言已依据第 4 节 Git 历史完成对齐。
+- 阶段 6 将认证依赖抽到 `api/dependencies.py`；JWT 优先级、API Token 能力与网页专用接口限制均有回归覆盖。
+- 阶段 6 新增 8 项测试，覆盖 `pending -> running -> completed/failed`、持久化失败回滚、父表 join 权限、显式子表删除、并发 1 专用 executor、app 孤儿恢复和 scheduler 不恢复。
 
 ## 6. 后续回归判定规则
 
@@ -124,7 +128,7 @@ TestChatCompletionsEndpoint::test_requires_auth PASSED
 - `0 failed`；
 - `0 errors`；
 - skipped 仅限未运行 Redis 时的 11 项 `tests/test_job_store_redis.py`；
-- K 线回测专项 32 项全部通过；
+- K 线回测专项 40 项全部通过；
 - 两个 `test_requires_auth` 全部通过。
 
 任何失败、错误、挂死、新增 skipped，或既有通过项转为 skipped，均视为回归。带 Redis 的阶段 8 集成环境还应要求 11 项 Redis 测试执行并通过。

@@ -1,5 +1,7 @@
+import sys
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -16,7 +18,7 @@ from api.models.kline_backtest import (
     KBTradeDB,
     KlineCacheDB,
 )
-from api.services.kline_backtest.data_provider import KlineCacheStore, align_to_trading_calendar, normalize_dataframe
+from api.services.kline_backtest.data_provider import AkshareKlineProvider, KlineCacheStore, align_to_trading_calendar, normalize_dataframe
 from api.services.kline_backtest.fees import (
     FUND_FEE_PROFILE,
     STOCK_FEE_PROFILE,
@@ -111,6 +113,33 @@ def test_incomplete_current_day_is_excluded():
         akshare_version="test", fetched_at=shanghai_morning_as_utc,
     )
     assert [bar.date for bar in data.bars] == [date(2025, 1, 2)]
+
+
+def test_manual_fund_override_selects_fund_akshare_endpoint(monkeypatch):
+    calls = []
+
+    def fund_fetcher(**kwargs):
+        calls.append(("fund", kwargs))
+        return _frame()
+
+    def stock_fetcher(**kwargs):
+        raise AssertionError("stock endpoint must not be used for a fund override")
+
+    fake_akshare = SimpleNamespace(
+        __version__="test",
+        fund_etf_hist_em=fund_fetcher,
+        stock_zh_a_hist=stock_fetcher,
+    )
+    monkeypatch.setitem(sys.modules, "akshare", fake_akshare)
+    data = AkshareKlineProvider().fetch(
+        "600519.SH",
+        date(2025, 1, 2),
+        date(2025, 1, 3),
+        instrument_type_override="fund",
+        now=datetime(2025, 1, 4, 16, tzinfo=timezone.utc),
+    )
+    assert data.source_api == "fund_etf_hist_em"
+    assert calls[0][0] == "fund"
 
 
 def test_missing_security_day_is_aligned_as_non_tradable_suspension():

@@ -267,18 +267,21 @@ class KlineCacheStore:
         adjust: str,
         start_date: date,
         end_date: date,
+        source_api: str | None = None,
         now: Optional[datetime] = None,
     ) -> Optional[NormalizedKlineData]:
         now = now or datetime.now(timezone.utc)
+        query = self.session.query(KlineCacheDB).filter(
+            KlineCacheDB.symbol == symbol,
+            KlineCacheDB.adjust == adjust,
+            KlineCacheDB.start_date <= start_date.isoformat(),
+            KlineCacheDB.end_date >= end_date.isoformat(),
+            KlineCacheDB.expires_at > now,
+        )
+        if source_api is not None:
+            query = query.filter(KlineCacheDB.source_api == source_api)
         record = (
-            self.session.query(KlineCacheDB)
-            .filter(
-                KlineCacheDB.symbol == symbol,
-                KlineCacheDB.adjust == adjust,
-                KlineCacheDB.start_date <= start_date.isoformat(),
-                KlineCacheDB.end_date >= end_date.isoformat(),
-                KlineCacheDB.expires_at > now,
-            )
+            query
             .order_by(KlineCacheDB.fetched_at.desc())
             .first()
         )
@@ -308,6 +311,7 @@ class KlineCacheStore:
                 KlineCacheDB.adjust == data.adjust,
                 KlineCacheDB.start_date == data.actual_start.isoformat(),
                 KlineCacheDB.end_date == data.actual_end.isoformat(),
+                KlineCacheDB.source_api == data.source_api,
                 KlineCacheDB.data_hash == data.data_hash,
             )
             .first()
@@ -351,14 +355,17 @@ class AkshareKlineProvider:
         cache: Optional[KlineCacheStore] = None,
         force_refresh: bool = False,
         now: Optional[datetime] = None,
+        instrument_type_override: str | None = None,
     ) -> NormalizedKlineData:
-        info = require_backtestable(symbol)
+        info = require_backtestable(symbol, instrument_type_override)
+        source_api = "fund_etf_hist_em" if info.instrument_type is InstrumentType.FUND else "stock_zh_a_hist"
         if cache is not None and not force_refresh:
             cached = cache.get(
                 symbol=info.symbol,
                 adjust=adjust,
                 start_date=start_date,
                 end_date=end_date,
+                source_api=source_api,
                 now=now,
             )
             if cached is not None:
@@ -374,10 +381,8 @@ class AkshareKlineProvider:
             "adjust": adjust_arg,
         }
         if info.instrument_type is InstrumentType.FUND:
-            source_api = "fund_etf_hist_em"
             fetcher = ak.fund_etf_hist_em
         else:
-            source_api = "stock_zh_a_hist"
             fetcher = ak.stock_zh_a_hist
         with AKSHARE_CALL_LOCK:
             frame = fetcher(**kwargs)

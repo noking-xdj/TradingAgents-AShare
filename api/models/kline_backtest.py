@@ -1,8 +1,7 @@
 """Persistent models for deterministic K-line backtests.
 
-The module is intentionally not imported by ``api.database`` yet.  Stage 6 will
-register it with application startup.  Unit tests import it explicitly before
-calling ``Base.metadata.create_all``.
+``api.main`` imports this module before its lifespan calls ``init_db()`` so the
+tables are registered without coupling ``api.database`` to feature modules.
 """
 
 from datetime import datetime, timezone
@@ -33,7 +32,7 @@ class KlineCacheDB(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "symbol", "adjust", "start_date", "end_date", "data_hash",
+            "symbol", "adjust", "start_date", "end_date", "source_api", "data_hash",
             name="uq_kline_cache_version",
         ),
     )
@@ -68,7 +67,7 @@ class KBStrategyResultDB(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     run_id = Column(String(36), ForeignKey("kb_runs.run_id"), nullable=False, index=True)
-    strategy_key = Column(String(8), nullable=False)
+    strategy_key = Column(String(16), nullable=False)
     metrics = Column(JSON, nullable=False)
     signal_stats = Column(JSON, nullable=False)
     open_position = Column(JSON, nullable=True)

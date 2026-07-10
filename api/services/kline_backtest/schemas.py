@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, is_dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Literal, Optional
+from zoneinfo import ZoneInfo
+
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 ZERO = Decimal("0")
@@ -222,3 +225,96 @@ def primitive(value: Any) -> Any:
 
 def bars_in_period(bars: Iterable[Bar], start: date, end: date) -> list[Bar]:
     return [bar for bar in bars if start <= bar.date <= end]
+
+
+def previous_full_year(today: date | None = None) -> tuple[date, date]:
+    current = today or datetime.now(ZoneInfo("Asia/Shanghai")).date()
+    year = current.year - 1
+    return date(year, 1, 1), date(year, 12, 31)
+
+
+class FeeProfileRequest(BaseModel):
+    commission_rate: Decimal | None = Field(default=None, ge=ZERO)
+    minimum_commission: Decimal | None = Field(default=None, ge=ZERO)
+    stamp_tax_rate: Decimal | None = Field(default=None, ge=ZERO)
+    transfer_fee_rate: Decimal | None = Field(default=None, ge=ZERO)
+    buy_slippage_rate: Decimal | None = Field(default=None, ge=ZERO, lt=Decimal("1"))
+    sell_slippage_rate: Decimal | None = Field(default=None, ge=ZERO, lt=Decimal("1"))
+
+
+class KlineBacktestCreateRequest(BaseModel):
+    symbol: str = Field(min_length=1, max_length=20)
+    start_date: date | None = None
+    end_date: date | None = None
+    instrument_type_override: Literal["stock", "fund"] | None = None
+    strategy_keys: list[Literal["A", "B", "C", "D"]] = Field(
+        default_factory=lambda: ["A", "B", "C", "D"],
+    )
+    adjust: Literal["qfq", "hfq", "none", "raw"] = "qfq"
+    force_refresh: bool = False
+
+    initial_cash: Decimal = Field(default=Decimal("100000"), gt=ZERO)
+    max_position_ratio: Decimal = Field(default=Decimal("1"), gt=ZERO, le=Decimal("1"))
+    short_ma: int = Field(default=5, gt=0)
+    long_ma: int = Field(default=20, gt=0)
+    pivot_left: int = Field(default=3, gt=0)
+    pivot_right: int = Field(default=3, gt=0)
+    fib_window: int = Field(default=60, gt=0)
+    fib_tolerance: Decimal = Field(default=Decimal("0.01"), ge=ZERO, lt=Decimal("1"))
+    fib_min_amplitude: Decimal = Field(default=Decimal("0.05"), ge=ZERO, lt=Decimal("1"))
+    fib_mode: Literal["discrete", "zone"] = "discrete"
+    trend_tolerance: Decimal = Field(default=Decimal("0.005"), ge=ZERO, lt=Decimal("1"))
+    trend_break_threshold: Decimal = Field(default=Decimal("0.01"), ge=ZERO, lt=Decimal("1"))
+    trend_min_touches: int = Field(default=3, ge=3)
+    pivot_min_separation: int = Field(default=5, gt=0)
+    stop_loss: Decimal | None = Field(default=Decimal("0.08"), gt=ZERO, lt=Decimal("1"))
+    take_profit: Decimal | None = Field(default=Decimal("0.15"), gt=ZERO)
+    max_deferred_days: int = Field(default=5, ge=0)
+    risk_free_rate: Decimal = Field(default=Decimal("0.02"), ge=ZERO)
+    annual_trading_days: int = Field(default=252, gt=0)
+    fee: FeeProfileRequest | None = None
+
+    @field_validator("strategy_keys")
+    @classmethod
+    def validate_strategy_keys(cls, value: list[str]) -> list[str]:
+        unique = list(dict.fromkeys(value))
+        if not unique:
+            raise ValueError("at least one strategy is required")
+        return unique
+
+    @model_validator(mode="after")
+    def validate_ranges(self) -> "KlineBacktestCreateRequest":
+        if self.start_date is None and self.end_date is None:
+            self.start_date, self.end_date = previous_full_year()
+        elif self.start_date is None or self.end_date is None:
+            raise ValueError("start_date and end_date must be provided together")
+        if self.start_date > self.end_date:
+            raise ValueError("start_date must not be after end_date")
+        if self.short_ma >= self.long_ma:
+            raise ValueError("short_ma must be less than long_ma")
+        return self
+
+    def engine_config(self) -> BacktestConfig:
+        return BacktestConfig(
+            start_date=self.start_date,
+            end_date=self.end_date,
+            initial_cash=self.initial_cash,
+            max_position_ratio=self.max_position_ratio,
+            short_ma=self.short_ma,
+            long_ma=self.long_ma,
+            pivot_left=self.pivot_left,
+            pivot_right=self.pivot_right,
+            fib_window=self.fib_window,
+            fib_tolerance=self.fib_tolerance,
+            fib_min_amplitude=self.fib_min_amplitude,
+            fib_mode=self.fib_mode,
+            trend_tolerance=self.trend_tolerance,
+            trend_break_threshold=self.trend_break_threshold,
+            trend_min_touches=self.trend_min_touches,
+            pivot_min_separation=self.pivot_min_separation,
+            stop_loss=self.stop_loss,
+            take_profit=self.take_profit,
+            max_deferred_days=self.max_deferred_days,
+            risk_free_rate=self.risk_free_rate,
+            annual_trading_days=self.annual_trading_days,
+        )

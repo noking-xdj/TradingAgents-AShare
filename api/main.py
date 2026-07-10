@@ -35,12 +35,18 @@ load_dotenv()
 from fastapi import FastAPI, File, HTTPException, Depends, Query, Request, UploadFile, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_serializer
 from sqlalchemy.orm import Session
 import pandas as pd
 
 from api.database import UserDB, UserLLMConfigDB, VersionStatsDB, ReportDB, ImportedPortfolioPositionDB, FeedbackDB, SponsorDB, init_db, get_db, get_db_ctx
+# Register independently defined SQLAlchemy models before any lifespan init_db().
+from api.models import kline_backtest as _kline_backtest_models  # noqa: F401
+from api.dependencies import (
+    optional_user as _optional_user,
+    require_api_user as _require_api_user,
+    require_web_user as _require_web_user,
+)
 from api.job_store import get_job_store as _new_job_store
 from api.services import auth_service, portfolio_import_service, report_service, token_service, watchlist_service, scheduled_service, tracking_board_service, feedback_service, sponsor_service
 
@@ -247,6 +253,10 @@ async def lifespan(app: FastAPI):
 
     init_db()
     _log("Database initialized.")
+    from api.services.kline_backtest import task_manager as kline_backtest_tasks
+    orphaned_backtests = kline_backtest_tasks.recover_orphaned_runs()
+    if orphaned_backtests:
+        _log(f"Recovered {orphaned_backtests} orphaned K-line backtest runs.")
     store = get_job_store()
     store.clear()
     _background_tasks.clear()
@@ -270,6 +280,7 @@ async def lifespan(app: FastAPI):
     yield
     _log("Shutting down: Cleaning up resources...")
     _executor.shutdown(wait=True)
+    kline_backtest_tasks.shutdown()
     if new_default_executor is not None:
         new_default_executor.shutdown(wait=False)
     _log("Executor shutdown complete.")
@@ -308,6 +319,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+from api.routers.kline_backtest import router as kline_backtest_router
+app.include_router(kline_backtest_router)
 
 _executor = ThreadPoolExecutor(max_workers=int(os.getenv("TA_MAX_WORKERS", "2")))
 # lifespan 中创建的 asyncio 默认 executor，healthz 探针用它报告饱和度
@@ -499,8 +512,6 @@ def _resolve_watchlist_identifier(
         return symbol, code_to_name.get(symbol, symbol), None
     return None, None, f"未识别的股票代码或名称: {token}"
 
-
-_auth_scheme = HTTPBearer(auto_error=False)
 
 FIXED_TEAMS = {
     "Analyst Team": [
@@ -1008,68 +1019,6 @@ def _build_runtime_config(overrides: Dict[str, Any], user_id: Optional[str] = No
         config["quick_think_llm"] = deep
 
     return config
-
-
-class RequireUser:
-    def __init__(self, allow_api_token: bool = True):
-        self.allow_api_token = allow_api_token
-
-    def __call__(
-        self,
-        credentials: Optional[HTTPAuthorizationCredentials] = Depends(_auth_scheme),
-    ) -> UserDB:
-        if not credentials:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="请先登录")
-
-        token = credentials.credentials
-
-        with get_db_ctx() as db:
-            # 1. 优先尝试 JWT (网页登录)
-            try:
-                payload = auth_service.decode_access_token(token)
-                user_id = str(payload.get("sub") or "")
-                user = auth_service.get_user_by_id(db, user_id)
-                if user and user.is_active:
-                    # expunge 使 ORM 对象脱离 session，close 后仍可访问属性
-                    db.expunge(user)
-                    return user
-            except Exception:
-                # 不是有效的 JWT 或已过期，尝试 API Token
-                pass
-
-            # 2. 尝试 API Token (仅在允许时)
-            if self.allow_api_token and token.startswith(token_service.TOKEN_PREFIX):
-                user = token_service.verify_token(db, token)
-                if user and user.is_active:
-                    db.expunge(user)
-                    return user
-
-        detail = "身份验证失败或该接口不支持 API Token 访问" if self.allow_api_token else "该接口仅限网页端登录访问"
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
-
-
-# 快捷依赖定义
-_require_api_user = RequireUser(allow_api_token=True)    # 允许 API Token
-_require_web_user = RequireUser(allow_api_token=False)   # 仅限网页登录
-
-
-def _optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_auth_scheme),
-) -> Optional[UserDB]:
-    if not credentials:
-        return None
-    try:
-        payload = auth_service.decode_access_token(credentials.credentials)
-    except Exception:
-        return None
-    user_id = str(payload.get("sub") or "")
-    if not user_id:
-        return None
-    with get_db_ctx() as db:
-        user = auth_service.get_user_by_id(db, user_id)
-        if user:
-            db.expunge(user)
-        return user
 
 
 def _set_job(job_key: str, **kwargs) -> None:
