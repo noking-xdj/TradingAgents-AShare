@@ -1,12 +1,13 @@
 import asyncio
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from api.database import Base, UserDB
 from api.services import scheduled_service
@@ -14,7 +15,11 @@ from api.services import scheduled_service
 
 @pytest.fixture
 def db():
-    engine = create_engine("sqlite:///:memory:")
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     session = Session()
@@ -124,7 +129,7 @@ class TestPortfolioImportService:
         assert state["summary"]["positions"] == 0
 
     def test_scheduled_job_uses_imported_position_context(self, db):
-        from api.main import _run_scheduled_job
+        from scheduler.main import _run_scheduled_job
         from api.services import portfolio_import_service
 
         portfolio_import_service.sync_positions(
@@ -150,9 +155,11 @@ class TestPortfolioImportService:
                 if exc_type is not None:
                     db.rollback()
 
-        with patch("api.main._run_job", side_effect=fake_run_job), patch(
-            "api.main.get_db_ctx",
+        with patch("scheduler.main._run_job", side_effect=fake_run_job), patch(
+            "scheduler.main.get_db_ctx",
             return_value=FakeDbCtx(),
+        ), patch(
+            "scheduler.main._send_scheduled_report_notifications", new_callable=AsyncMock,
         ), patch("tradingagents.dataflows.trade_calendar.is_cn_trading_day", return_value=True):
             asyncio.run(
                 _run_scheduled_job(
@@ -172,7 +179,7 @@ class TestPortfolioImportService:
         assert "持仓导入" in (request.user_notes or "")
 
     def test_scheduled_job_marks_failed_when_underlying_job_fails(self, db):
-        from api.main import _run_scheduled_job, _set_job
+        from scheduler.main import _run_scheduled_job, _set_job
 
         item = scheduled_service.create_scheduled(db, "user-failed", "300750.SZ", "short")
 
@@ -187,9 +194,11 @@ class TestPortfolioImportService:
         async def fake_run_job(job_id, request, *args, **kwargs):
             _set_job(job_id, status="failed", error="ModuleNotFoundError: missing module")
 
-        with patch("api.main._run_job", side_effect=fake_run_job), patch(
-            "api.main.get_db_ctx",
+        with patch("scheduler.main._run_job", side_effect=fake_run_job), patch(
+            "scheduler.main.get_db_ctx",
             return_value=FakeDbCtx(),
+        ), patch(
+            "scheduler.main._send_scheduled_report_notifications", new_callable=AsyncMock,
         ), patch("tradingagents.dataflows.trade_calendar.is_cn_trading_day", return_value=True):
             asyncio.run(
                 _run_scheduled_job(
