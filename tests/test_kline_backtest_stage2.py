@@ -1,10 +1,12 @@
 import sys
+import logging
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+from requests import exceptions as requests_exceptions
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -18,7 +20,13 @@ from api.models.kline_backtest import (
     KBTradeDB,
     KlineCacheDB,
 )
-from api.services.kline_backtest.data_provider import AkshareKlineProvider, KlineCacheStore, align_to_trading_calendar, normalize_dataframe
+from api.services.kline_backtest.data_provider import (
+    AkshareKlineProvider,
+    KlineCacheStore,
+    KlineDataSourceConnectionError,
+    align_to_trading_calendar,
+    normalize_dataframe,
+)
 from api.services.kline_backtest.fees import (
     FUND_FEE_PROFILE,
     STOCK_FEE_PROFILE,
@@ -140,6 +148,106 @@ def test_manual_fund_override_selects_fund_akshare_endpoint(monkeypatch):
     )
     assert data.source_api == "fund_etf_hist_em"
     assert calls[0][0] == "fund"
+
+
+def test_akshare_connection_failure_retries_then_succeeds_and_logs(monkeypatch, caplog):
+    calls = []
+    sleeps = []
+
+    def stock_fetcher(**kwargs):
+        calls.append(kwargs)
+        if len(calls) < 3:
+            raise requests_exceptions.ConnectionError("remote closed connection")
+        return _frame()
+
+    fake_akshare = SimpleNamespace(
+        __version__="test",
+        fund_etf_hist_em=lambda **kwargs: _frame(),
+        stock_zh_a_hist=stock_fetcher,
+    )
+    monkeypatch.setitem(sys.modules, "akshare", fake_akshare)
+    provider = AkshareKlineProvider(
+        max_attempts=3,
+        retry_base_seconds=0.25,
+        sleeper=sleeps.append,
+    )
+
+    with caplog.at_level(logging.INFO):
+        data = provider.fetch(
+            "600519.SH",
+            date(2025, 1, 2),
+            date(2025, 1, 3),
+            now=datetime(2025, 1, 4, 16, tzinfo=timezone.utc),
+        )
+
+    assert len(calls) == 3
+    assert sleeps == [0.25, 0.5]
+    assert data.source_api == "stock_zh_a_hist"
+    assert "connection retry" in caplog.text
+    assert "fetch success" in caplog.text
+
+
+def test_akshare_connection_failure_exhausts_retries_and_raises_explicit_error(
+    monkeypatch, caplog,
+):
+    calls = []
+    sleeps = []
+
+    def stock_fetcher(**kwargs):
+        calls.append(kwargs)
+        raise requests_exceptions.ConnectionError("empty reply from server")
+
+    fake_akshare = SimpleNamespace(
+        __version__="test",
+        fund_etf_hist_em=lambda **kwargs: _frame(),
+        stock_zh_a_hist=stock_fetcher,
+    )
+    monkeypatch.setitem(sys.modules, "akshare", fake_akshare)
+    provider = AkshareKlineProvider(
+        max_attempts=3,
+        retry_base_seconds=0.1,
+        sleeper=sleeps.append,
+    )
+
+    with caplog.at_level(logging.INFO), pytest.raises(
+        KlineDataSourceConnectionError,
+        match="connection failed after 3 attempts.*600519.SH",
+    ):
+        provider.fetch(
+            "600519.SH",
+            date(2025, 1, 2),
+            date(2025, 1, 3),
+            now=datetime(2025, 1, 4, 16, tzinfo=timezone.utc),
+        )
+
+    assert len(calls) == 3
+    assert sleeps == [0.1, 0.2]
+    assert "connection exhausted" in caplog.text
+
+
+def test_akshare_non_connection_error_is_not_retried(monkeypatch):
+    calls = []
+
+    def stock_fetcher(**kwargs):
+        calls.append(kwargs)
+        raise ValueError("bad response schema")
+
+    fake_akshare = SimpleNamespace(
+        __version__="test",
+        fund_etf_hist_em=lambda **kwargs: _frame(),
+        stock_zh_a_hist=stock_fetcher,
+    )
+    monkeypatch.setitem(sys.modules, "akshare", fake_akshare)
+
+    with pytest.raises(ValueError, match="bad response schema"):
+        AkshareKlineProvider(max_attempts=3, retry_base_seconds=0).fetch(
+            "600519.SH",
+            date(2025, 1, 2),
+            date(2025, 1, 3),
+            now=datetime(2025, 1, 4, 16, tzinfo=timezone.utc),
+        )
+
+    assert len(calls) == 1
 
 
 def test_missing_security_day_is_aligned_as_non_tradable_suspension():

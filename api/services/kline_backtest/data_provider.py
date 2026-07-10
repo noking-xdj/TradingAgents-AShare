@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import os
+import time as time_module
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any, Iterable, Optional
+from http.client import RemoteDisconnected
+from typing import Any, Callable, Iterable, Optional
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import pandas as pd
+from requests import exceptions as requests_exceptions
 from sqlalchemy.orm import Session
 
 from api.models.kline_backtest import KlineCacheDB
@@ -23,6 +28,54 @@ from .schemas import Bar, InstrumentType, primitive
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 DEFAULT_CACHE_TTL = timedelta(days=7)
+DEFAULT_AKSHARE_MAX_ATTEMPTS = 3
+DEFAULT_AKSHARE_RETRY_BASE_SECONDS = 1.0
+
+logger = logging.getLogger(__name__)
+
+
+class KlineDataSourceConnectionError(RuntimeError):
+    """Raised after the configured AkShare connection retries are exhausted."""
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("Invalid %s=%r; using default %s", name, raw, default)
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning("Invalid %s=%r; using default %s", name, raw, default)
+        return default
+
+
+def _is_retryable_connection_error(exc: BaseException) -> bool:
+    retryable = (
+        requests_exceptions.ConnectionError,
+        requests_exceptions.Timeout,
+        ConnectionError,
+        TimeoutError,
+        RemoteDisconnected,
+    )
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        if isinstance(current, retryable):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
 
 
 @dataclass(frozen=True)
@@ -345,6 +398,99 @@ class KlineCacheStore:
 class AkshareKlineProvider:
     """One strict AkShare endpoint per instrument type; no vendor fallback."""
 
+    def __init__(
+        self,
+        *,
+        max_attempts: int | None = None,
+        retry_base_seconds: float | None = None,
+        sleeper: Callable[[float], None] = time_module.sleep,
+    ) -> None:
+        self.max_attempts = max_attempts if max_attempts is not None else _env_int(
+            "KLINE_AKSHARE_MAX_ATTEMPTS", DEFAULT_AKSHARE_MAX_ATTEMPTS,
+        )
+        self.retry_base_seconds = (
+            retry_base_seconds
+            if retry_base_seconds is not None
+            else _env_float("KLINE_AKSHARE_RETRY_BASE_SECONDS", DEFAULT_AKSHARE_RETRY_BASE_SECONDS)
+        )
+        if self.max_attempts < 1:
+            raise ValueError("max_attempts must be at least 1")
+        if self.retry_base_seconds < 0:
+            raise ValueError("retry_base_seconds must be non-negative")
+        self._sleep = sleeper
+
+    def _fetch_frame(
+        self,
+        fetcher: Callable[..., pd.DataFrame],
+        *,
+        source_api: str,
+        symbol: str,
+        kwargs: dict[str, Any],
+    ) -> pd.DataFrame:
+        for attempt in range(1, self.max_attempts + 1):
+            logger.info(
+                "AkShare K-line fetch attempt source=%s symbol=%s attempt=%s/%s start=%s end=%s adjust=%s",
+                source_api,
+                symbol,
+                attempt,
+                self.max_attempts,
+                kwargs["start_date"],
+                kwargs["end_date"],
+                kwargs["adjust"] or "raw",
+            )
+            try:
+                with AKSHARE_CALL_LOCK:
+                    frame = fetcher(**kwargs)
+                logger.info(
+                    "AkShare K-line fetch success source=%s symbol=%s attempt=%s/%s rows=%s",
+                    source_api,
+                    symbol,
+                    attempt,
+                    self.max_attempts,
+                    len(frame),
+                )
+                return frame
+            except Exception as exc:
+                if not _is_retryable_connection_error(exc):
+                    logger.error(
+                        "AkShare K-line fetch failed without retry source=%s symbol=%s attempt=%s/%s error_type=%s error=%s",
+                        source_api,
+                        symbol,
+                        attempt,
+                        self.max_attempts,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    raise
+                if attempt >= self.max_attempts:
+                    message = (
+                        f"AkShare {source_api} connection failed after {self.max_attempts} attempts "
+                        f"for {symbol}: {type(exc).__name__}: {exc}"
+                    )
+                    logger.error(
+                        "AkShare K-line connection exhausted source=%s symbol=%s attempts=%s error_type=%s error=%s",
+                        source_api,
+                        symbol,
+                        self.max_attempts,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    raise KlineDataSourceConnectionError(message) from exc
+                delay = self.retry_base_seconds * (2 ** (attempt - 1))
+                logger.warning(
+                    "AkShare K-line connection retry source=%s symbol=%s attempt=%s/%s delay_seconds=%.3f error_type=%s error=%s",
+                    source_api,
+                    symbol,
+                    attempt,
+                    self.max_attempts,
+                    delay,
+                    type(exc).__name__,
+                    exc,
+                )
+                if delay > 0:
+                    self._sleep(delay)
+        raise AssertionError("unreachable")
+
     def fetch(
         self,
         symbol: str,
@@ -384,8 +530,12 @@ class AkshareKlineProvider:
             fetcher = ak.fund_etf_hist_em
         else:
             fetcher = ak.stock_zh_a_hist
-        with AKSHARE_CALL_LOCK:
-            frame = fetcher(**kwargs)
+        frame = self._fetch_frame(
+            fetcher,
+            source_api=source_api,
+            symbol=info.symbol,
+            kwargs=kwargs,
+        )
         result = normalize_dataframe(
             frame,
             symbol=info.symbol,

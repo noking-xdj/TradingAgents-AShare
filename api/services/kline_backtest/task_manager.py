@@ -14,7 +14,12 @@ from tradingagents.dataflows.providers.cn_akshare_provider import AKSHARE_CALL_L
 from tradingagents.dataflows.trade_calendar import _load_cn_trade_dates
 
 from . import repository
-from .data_provider import AkshareKlineProvider, KlineCacheStore, NormalizedKlineData
+from .data_provider import (
+    AkshareKlineProvider,
+    KlineCacheStore,
+    KlineDataSourceConnectionError,
+    NormalizedKlineData,
+)
 from .fees import FeeProfile
 from .instrument import require_backtestable
 from .runner import run_backtest
@@ -136,6 +141,9 @@ class KlineBacktestTaskManager:
                 "fetched_at": data.fetched_at.isoformat(),
                 "adjust": request.adjust,
             }
+        except KlineDataSourceConnectionError as exc:
+            self._fail(run_id, error_code="data_source_connection_failed", exc=exc)
+            return
         except Exception as exc:
             self._fail(run_id, error_code="execution_failed", exc=exc)
             return

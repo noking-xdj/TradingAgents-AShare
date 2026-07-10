@@ -22,7 +22,11 @@ from api.models.kline_backtest import (
 )
 from api.services import auth_service, token_service
 from api.services.kline_backtest import repository, task_manager
-from api.services.kline_backtest.data_provider import NormalizedKlineData, canonical_data_hash
+from api.services.kline_backtest.data_provider import (
+    KlineDataSourceConnectionError,
+    NormalizedKlineData,
+    canonical_data_hash,
+)
 from api.services.kline_backtest.fees import STOCK_FEE_PROFILE
 from api.services.kline_backtest.schemas import KlineBacktestCreateRequest, primitive
 from tests.kline_backtest_helpers import make_bars
@@ -236,6 +240,28 @@ def test_persistence_failure_rolls_back_children_and_marks_run_failed():
         assert run.error_code == "persistence_failed"
         for model in CHILD_MODELS:
             assert db.query(model).filter_by(run_id=run_id).count() == 0
+
+
+def test_exhausted_data_source_connection_is_terminal_with_specific_error_code():
+    user, _ = _user_and_jwt()
+    request = _request()
+    run_id = _create_pending(user.id, request)
+    manager = task_manager.KlineBacktestTaskManager(max_workers=1)
+
+    with patch.object(
+        manager,
+        "_load_data",
+        side_effect=KlineDataSourceConnectionError(
+            "AkShare stock_zh_a_hist connection failed after 3 attempts for 600519.SH",
+        ),
+    ):
+        manager.execute(run_id)
+
+    with SessionLocal() as db:
+        run = db.query(KBRunDB).filter_by(run_id=run_id).one()
+        assert run.status == "failed"
+        assert run.error_code == "data_source_connection_failed"
+        assert "failed after 3 attempts" in run.error
 
 
 def test_orphan_recovery_marks_pending_and_running_failed_but_not_completed():
