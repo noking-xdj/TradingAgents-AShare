@@ -69,9 +69,9 @@ Golden-file、“全年无有效线/无合格波段”零交易夹具，以及 A
 
 ```text
 5 files passed
-27 tests passed
+28 tests passed
 0 failed
-completed in 421ms
+completed in 409ms
 ```
 
 前端生产构建和回测组件定点 ESLint 同时通过；Vite 仅保留既有的大 chunk 提示，不属于构建失败。
