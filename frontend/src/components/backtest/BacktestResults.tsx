@@ -11,6 +11,7 @@ import type {
 } from '@/types'
 import BacktestPerformanceCharts from './BacktestPerformanceCharts'
 import BacktestPriceChart from './BacktestPriceChart'
+import { BACKTEST_METRIC_CARDS, formatBacktestMetric } from '@/utils/backtestMetrics'
 import { BACKTEST_DATA_SOURCE_LABELS } from '@/utils/klineBacktest'
 
 interface Props {
@@ -24,29 +25,9 @@ interface Props {
     onStrategyChange: (strategy: KlineBacktestStrategy) => void
 }
 
-const METRICS: Array<{ key: string; label: string; format: 'money' | 'percent' | 'number' | 'ratio' }> = [
-    { key: 'final_asset', label: '期末资产', format: 'money' },
-    { key: 'total_return', label: '净收益率', format: 'percent' },
-    { key: 'annualized_return', label: '年化收益率', format: 'percent' },
-    { key: 'max_drawdown', label: '最大回撤', format: 'percent' },
-    { key: 'sharpe', label: '夏普比率', format: 'ratio' },
-    { key: 'completed_trades', label: '完整交易', format: 'number' },
-    { key: 'win_rate', label: '胜率', format: 'percent' },
-    { key: 'total_cost', label: '总成本', format: 'money' },
-]
-
 function numeric(value: string | number | null | undefined): number | null {
     const parsed = Number(value)
     return Number.isFinite(parsed) ? parsed : null
-}
-
-function formatMetric(value: string | number | null | undefined, format: 'money' | 'percent' | 'number' | 'ratio'): string {
-    const parsed = numeric(value)
-    if (parsed == null) return '--'
-    if (format === 'money') return `¥${parsed.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`
-    if (format === 'percent') return `${(parsed * 100).toFixed(2)}%`
-    if (format === 'number') return String(Math.round(parsed))
-    return parsed.toFixed(2)
 }
 
 const CONDITION_LABELS: Record<string, string> = {
@@ -106,11 +87,11 @@ export default function BacktestResults({ detail, selectedStrategy, equityByStra
 
             {!loading && selected && (
                 <>
-                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 2xl:grid-cols-8">
-                        {METRICS.map(item => (
-                            <div key={item.key} className="card min-w-0">
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 2xl:grid-cols-9">
+                        {BACKTEST_METRIC_CARDS.map(item => (
+                            <div key={item.key} className="card min-w-0" title={item.description}>
                                 <p className="text-xs text-slate-500">{item.label}</p>
-                                <p className="mt-2 truncate text-lg font-semibold">{formatMetric(metrics[item.key], item.format)}</p>
+                                <p className="mt-2 truncate text-lg font-semibold">{formatBacktestMetric(metrics[item.key], item.format)}</p>
                             </div>
                         ))}
                     </div>
@@ -121,7 +102,7 @@ export default function BacktestResults({ detail, selectedStrategy, equityByStra
                                 <AlertTriangle className="mt-0.5 shrink-0" size={17} />
                                 <div>
                                     <p className="font-semibold">初始资金不足，当前策略未能买入一手</p>
-                                    <p className="mt-1">共有 {insufficientCashOrders} 笔买单因资金不足取消。当前初始资金为 {formatMetric(params.initial_cash, 'money')}；A 股及场内基金按 100 股/份一手成交，请提高初始资金后重新回测。</p>
+                                    <p className="mt-1">共有 {insufficientCashOrders} 笔买单因资金不足取消。当前初始资金为 {formatBacktestMetric(params.initial_cash, 'money')}；A 股及场内基金按 100 股/份一手成交，请提高初始资金后重新回测。</p>
                                 </div>
                             </div>
                         </div>
@@ -142,13 +123,13 @@ export default function BacktestResults({ detail, selectedStrategy, equityByStra
                             <h3 className="font-semibold">多策略对比</h3>
                             <div className="mt-3 overflow-x-auto">
                                 <table className="w-full min-w-[720px] text-left text-sm">
-                                    <thead className="text-xs text-slate-500"><tr><th className="py-2">策略</th><th>净收益</th><th>最大回撤</th><th>夏普</th><th>完整交易</th><th>胜率</th><th>总成本</th></tr></thead>
+                                    <thead className="text-xs text-slate-500"><tr><th className="py-2">策略</th><th>净收益</th><th>最大回撤</th><th>夏普</th><th>完整交易</th><th>胜率</th><th title="盈利交易净盈利总额 ÷ 亏损交易净亏损绝对值">盈亏比</th><th>总成本</th></tr></thead>
                                     <tbody>
                                         {strategies.map(key => {
                                             const row = detail.strategies[key]?.metrics ?? {}
-                                            return <tr key={key} className="border-t border-slate-100 dark:border-slate-700"><td className="py-2 font-semibold">{key}</td><td>{formatMetric(row.total_return, 'percent')}</td><td>{formatMetric(row.max_drawdown, 'percent')}</td><td>{formatMetric(row.sharpe, 'ratio')}</td><td>{formatMetric(row.completed_trades, 'number')}</td><td>{formatMetric(row.win_rate, 'percent')}</td><td>{formatMetric(row.total_cost, 'money')}</td></tr>
+                                            return <tr key={key} className="border-t border-slate-100 dark:border-slate-700"><td className="py-2 font-semibold">{key}</td><td>{formatBacktestMetric(row.total_return, 'percent')}</td><td>{formatBacktestMetric(row.max_drawdown, 'percent')}</td><td>{formatBacktestMetric(row.sharpe, 'ratio')}</td><td>{formatBacktestMetric(row.completed_trades, 'number')}</td><td>{formatBacktestMetric(row.win_rate, 'percent')}</td><td>{formatBacktestMetric(row.profit_loss_ratio, 'ratio')}</td><td>{formatBacktestMetric(row.total_cost, 'money')}</td></tr>
                                         })}
-                                        {detail.benchmark && <tr className="border-t border-slate-100 text-slate-500 dark:border-slate-700"><td className="py-2 font-semibold">买入持有</td><td>{formatMetric(detail.benchmark.metrics.total_return, 'percent')}</td><td>{formatMetric(detail.benchmark.metrics.max_drawdown, 'percent')}</td><td>{formatMetric(detail.benchmark.metrics.sharpe, 'ratio')}</td><td>--</td><td>--</td><td>{formatMetric(detail.benchmark.metrics.total_cost, 'money')}</td></tr>}
+                                        {detail.benchmark && <tr className="border-t border-slate-100 text-slate-500 dark:border-slate-700"><td className="py-2 font-semibold">买入持有</td><td>{formatBacktestMetric(detail.benchmark.metrics.total_return, 'percent')}</td><td>{formatBacktestMetric(detail.benchmark.metrics.max_drawdown, 'percent')}</td><td>{formatBacktestMetric(detail.benchmark.metrics.sharpe, 'ratio')}</td><td>--</td><td>--</td><td>--</td><td>{formatBacktestMetric(detail.benchmark.metrics.total_cost, 'money')}</td></tr>}
                                     </tbody>
                                 </table>
                             </div>

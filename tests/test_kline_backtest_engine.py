@@ -4,12 +4,14 @@ from decimal import Decimal
 from api.services.kline_backtest.engine import run_strategy
 from api.services.kline_backtest.fees import STOCK_FEE_PROFILE
 from api.services.kline_backtest.instrument import require_backtestable
-from api.services.kline_backtest.metrics import run_benchmark
+from api.services.kline_backtest.metrics import compute_metrics, run_benchmark
 from api.services.kline_backtest.schemas import (
     BacktestConfig,
     Bar,
     OrderType,
     Position,
+    EquityPoint,
+    OrderRecord,
     SignalDecision,
 )
 from api.services.kline_backtest.strategies.base import Strategy
@@ -136,3 +138,32 @@ def test_benchmark_defers_initial_entry_and_reports_actual_date():
     benchmark = run_benchmark(bars, config, require_backtestable("600519.SH"), STOCK_FEE_PROFILE)
     assert benchmark.actual_entry_date == bars[1].date
     assert benchmark.equity[0].total == config.initial_cash
+
+
+def test_profit_loss_ratio_uses_total_realized_wins_over_total_realized_losses():
+    day = date(2025, 1, 2)
+    config = BacktestConfig(start_date=day, end_date=day)
+    equity = [EquityPoint(day, config.initial_cash, d("0"), config.initial_cash)]
+    realized_values = (d("120"), d("30"), d("-50"))
+    orders = [
+        OrderRecord(
+            strategy_key="A",
+            signal_date=day,
+            planned_date=day,
+            actual_date=day,
+            order_type="strategy",
+            side="SELL",
+            outcome="executed",
+            reasons=["fixture"],
+            realized_pnl=value,
+        )
+        for value in realized_values
+    ]
+
+    metrics = compute_metrics(equity, orders, config)
+
+    assert metrics["profit_loss_ratio"] == d("3")
+    assert metrics["win_rate"] == d("2") / d("3")
+
+    no_loss_metrics = compute_metrics(equity, orders[:2], config)
+    assert no_loss_metrics["profit_loss_ratio"] is None
