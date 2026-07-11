@@ -22,9 +22,18 @@ describe('K-line backtest defaults', () => {
         })
         const value = createDefaultBacktestInput('601398.SH', new Date('2026-07-11T12:00:00+08:00'))
         expect(value.strategy_keys).toEqual(['A', 'B', 'C', 'D'])
-        expect(value.data_source).toBe('eastmoney')
+        expect(value.data_source).toBe('tencent')
+        expect(value.adjust).toBe('qfq')
         expect(value.initial_cash).toBe(100000)
         expect(value.fee.minimum_commission).toBe(0)
+
+        const fund = createDefaultBacktestInput('510300.SH', new Date('2026-07-11T12:00:00+08:00'))
+        expect(fund.data_source).toBe('sina')
+        expect(fund.adjust).toBe('raw')
+
+        const bse = createDefaultBacktestInput('830799.BJ', new Date('2026-07-11T12:00:00+08:00'))
+        expect(bse.data_source).toBe('sina')
+        expect(bse.adjust).toBe('qfq')
     })
 
     it('matches backend instrument classification and configured fee defaults', () => {
@@ -62,6 +71,7 @@ describe('K-line backtest validation', () => {
     it('validates source capabilities without silently changing the selection', () => {
         const fund = createDefaultBacktestInput('510300.SH')
         fund.data_source = 'sina'
+        fund.adjust = 'qfq'
         expect(validateBacktestInput(fund)).toContain('场内基金使用新浪时只能选择不复权')
         fund.adjust = 'raw'
         expect(validateBacktestInput(fund)).toEqual([])

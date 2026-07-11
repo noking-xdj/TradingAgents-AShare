@@ -86,6 +86,7 @@ class KlineBacktestTaskManager:
                     start_date=cache_start,
                     end_date=request.end_date,
                     source_api=source_api,
+                    trim_to_range=False,
                 )
             if cached is not None:
                 return cached

@@ -256,7 +256,7 @@ class KlineBacktestCreateRequest(BaseModel):
     strategy_keys: list[Literal["A", "B", "C", "D"]] = Field(
         default_factory=lambda: ["A", "B", "C", "D"],
     )
-    data_source: KlineDataSource = KlineDataSource.EASTMONEY
+    data_source: KlineDataSource = KlineDataSource.TENCENT
     adjust: Literal["qfq", "hfq", "none", "raw"] = "qfq"
     force_refresh: bool = False
 
@@ -280,6 +280,43 @@ class KlineBacktestCreateRequest(BaseModel):
     risk_free_rate: Decimal = Field(default=Decimal("0.02"), ge=ZERO)
     annual_trading_days: int = Field(default=252, gt=0)
     fee: FeeProfileRequest | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def apply_instrument_source_defaults(cls, value: Any) -> Any:
+        """Choose an explicit healthy default before the request is persisted."""
+        if not isinstance(value, dict):
+            return value
+        source_missing = value.get("data_source") in {None, ""}
+        adjust_missing = value.get("adjust") in {None, ""}
+        if not source_missing and not adjust_missing:
+            return value
+
+        data = dict(value)
+        try:
+            from .instrument import classify_instrument
+
+            info = classify_instrument(
+                str(data.get("symbol") or ""),
+                data.get("instrument_type_override"),
+            )
+        except (TypeError, ValueError):
+            return data
+
+        if source_missing:
+            data["data_source"] = (
+                KlineDataSource.SINA.value
+                if info.instrument_type is InstrumentType.FUND or info.market == "BJ"
+                else KlineDataSource.TENCENT.value
+            )
+        selected_source = KlineDataSource(data["data_source"])
+        if adjust_missing:
+            data["adjust"] = (
+                "raw"
+                if info.instrument_type is InstrumentType.FUND and selected_source is KlineDataSource.SINA
+                else "qfq"
+            )
+        return data
 
     @field_validator("strategy_keys")
     @classmethod

@@ -97,13 +97,15 @@ export function defaultBacktestFees(instrument: KlineBacktestInstrument): KlineB
 export function createDefaultBacktestInput(symbol: string, today = new Date()): KlineBacktestCreateInput {
     const period = previousFullYear(today)
     const instrument = classifyBacktestInstrument(symbol)
+    const normalized = normalizeBacktestSymbol(symbol)
+    const useSina = instrument === 'fund' || normalized?.endsWith('.BJ')
     return {
         symbol: symbol.trim().toUpperCase(),
         start_date: period.start,
         end_date: period.end,
         strategy_keys: ['A', 'B', 'C', 'D'],
-        data_source: 'eastmoney',
-        adjust: 'qfq',
+        data_source: useSina ? 'sina' : 'tencent',
+        adjust: instrument === 'fund' ? 'raw' : 'qfq',
         force_refresh: false,
         initial_cash: 100000,
         max_position_ratio: 1,

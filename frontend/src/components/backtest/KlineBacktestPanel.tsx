@@ -62,7 +62,14 @@ export default function KlineBacktestPanel({ symbol }: Props) {
     const start = () => { void submit({ ...form, symbol: backtestSymbol }).catch(() => undefined) }
     const retryWithSource = (dataSource: KlineBacktestDataSource) => {
         if (!detail) return
-        const next = { ...detail.params_snapshot, symbol: detail.symbol, data_source: dataSource }
+        const next = {
+            ...detail.params_snapshot,
+            symbol: detail.symbol,
+            data_source: dataSource,
+            adjust: detail.instrument_type === 'fund' && dataSource === 'sina'
+                ? 'raw' as const
+                : detail.params_snapshot.adjust,
+        }
         setForm(next)
         void submit(next).catch(() => undefined)
     }
@@ -72,12 +79,12 @@ export default function KlineBacktestPanel({ symbol }: Props) {
         const nextInstrument = classifyBacktestInstrument(nextSymbol)
         setBacktestSymbol(nextSymbol)
         setBacktestName(name)
+        const defaults = createDefaultBacktestInput(nextSymbol)
         setForm(current => ({
             ...current,
             symbol: nextSymbol,
-            data_source: nextInstrument === 'fund' || (nextSymbol.endsWith('.BJ') && current.data_source === 'tencent')
-                ? 'eastmoney'
-                : current.data_source,
+            data_source: defaults.data_source,
+            adjust: defaults.adjust,
             fee: defaultBacktestFees(nextInstrument),
         }))
     }

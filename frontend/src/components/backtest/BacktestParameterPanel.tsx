@@ -149,7 +149,14 @@ export default function BacktestParameterPanel({ value, instrument, errors, disa
                             </div>
                         </fieldset>
                         <label className="text-xs text-slate-500">行情数据源
-                            <select className="input mt-1 w-full" value={value.data_source} disabled={disabled} onChange={event => onChange({ ...value, data_source: event.target.value as KlineBacktestDataSource })}>
+                            <select className="input mt-1 w-full" value={value.data_source} disabled={disabled} onChange={event => {
+                                const dataSource = event.target.value as KlineBacktestDataSource
+                                onChange({
+                                    ...value,
+                                    data_source: dataSource,
+                                    adjust: instrument === 'fund' && dataSource === 'sina' ? 'raw' : value.adjust,
+                                })
+                            }}>
                                 {dataSources.map(source => <option key={source} value={source}>{BACKTEST_DATA_SOURCE_LABELS[source]}{instrument === 'fund' && source === 'sina' ? '（不复权）' : ''}</option>)}
                             </select>
                         </label>
@@ -166,7 +173,7 @@ export default function BacktestParameterPanel({ value, instrument, errors, disa
                             强制刷新数据
                         </label>
                     </div>
-                    <p className="text-xs text-slate-500">每次回测锁定所选数据源并记录接口、版本和数据哈希；连接失败不会静默切换供应商。</p>
+                    <p className="text-xs text-slate-500">当前默认：股票使用腾讯，场内基金使用新浪原始数据；每次回测锁定所选数据源并记录接口、版本和数据哈希，连接失败不会静默切换供应商。</p>
                 </div>
             </div>
         </section>

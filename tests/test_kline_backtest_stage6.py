@@ -137,7 +137,7 @@ def test_create_is_pending_202_activity_delete_is_409_and_index_is_rejected():
         run = db.query(KBRunDB).filter(KBRunDB.run_id == body["run_id"]).one()
         assert run.user_id == user.id
         assert run.status == "pending"
-        assert run.params_snapshot["data_source"] == "eastmoney"
+        assert run.params_snapshot["data_source"] == "tencent"
         assert "user_id" not in KBTradeDB.__table__.columns
 
     assert client.delete(f"/v1/kline-backtests/{body['run_id']}", headers=_headers(token)).status_code == 409
@@ -158,6 +158,20 @@ def test_create_is_pending_202_activity_delete_is_409_and_index_is_rejected():
         )
     assert unsupported.status_code == 400
     assert "暂不支持 tencent" in unsupported.json()["detail"]
+
+
+def test_omitted_source_uses_healthy_instrument_specific_defaults():
+    stock = KlineBacktestCreateRequest.model_validate({"symbol": "601398.SH"})
+    assert stock.data_source.value == "tencent"
+    assert stock.adjust == "qfq"
+
+    fund = KlineBacktestCreateRequest.model_validate({"symbol": "510300.SH"})
+    assert fund.data_source.value == "sina"
+    assert fund.adjust == "raw"
+
+    bse = KlineBacktestCreateRequest.model_validate({"symbol": "830799.BJ"})
+    assert bse.data_source.value == "sina"
+    assert bse.adjust == "qfq"
 
 
 def test_state_machine_persists_all_results_enforces_join_ownership_and_explicit_delete():

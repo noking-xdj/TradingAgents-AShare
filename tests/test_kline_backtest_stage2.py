@@ -409,6 +409,13 @@ def test_cache_roundtrip_and_ttl():
         )
         assert cached is not None
         assert cached.data_hash == data.data_hash
+        full_cached = store.get(
+            symbol="600519.SH", adjust="qfq", start_date=date(2025, 1, 3),
+            end_date=date(2025, 1, 3), now=now + timedelta(days=1), trim_to_range=False,
+        )
+        assert full_cached is not None
+        assert full_cached.bars == data.bars
+        assert full_cached.data_hash == data.data_hash
         assert store.get(
             symbol="600519.SH", adjust="qfq", start_date=date(2025, 1, 2),
             end_date=date(2025, 1, 3), now=now + timedelta(days=8),

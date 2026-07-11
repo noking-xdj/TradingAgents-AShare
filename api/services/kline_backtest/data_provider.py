@@ -372,6 +372,7 @@ class KlineCacheStore:
         end_date: date,
         source_api: str | None = None,
         now: Optional[datetime] = None,
+        trim_to_range: bool = True,
     ) -> Optional[NormalizedKlineData]:
         now = now or datetime.now(timezone.utc)
         query = self.session.query(KlineCacheDB).filter(
@@ -390,10 +391,12 @@ class KlineCacheStore:
         )
         if record is None:
             return None
-        bars = [
-            bar for bar in (_bar_from_payload(item) for item in record.payload)
-            if start_date <= bar.date <= end_date
-        ]
+        stored_bars = [_bar_from_payload(item) for item in record.payload]
+        bars = (
+            [bar for bar in stored_bars if start_date <= bar.date <= end_date]
+            if trim_to_range
+            else stored_bars
+        )
         if not bars:
             return None
         return NormalizedKlineData(
