@@ -6,6 +6,7 @@ import {
     classifyBacktestInstrument,
     createDefaultBacktestInput,
     defaultBacktestFees,
+    latestQualifiedFibonacciRange,
     normalizeBacktestSymbol,
     previousFullYear,
     resolveBacktestChartLayers,
@@ -129,5 +130,49 @@ describe('effective trendline rendering', () => {
             { date: '2025-01-04', trendline_price: '10.3', touch_count: 3 },
         ] as KlineBacktestSignal[]
         expect(splitEffectiveTrendlines(signals, 3)).toEqual([])
+    })
+})
+
+describe('qualified Fibonacci rendering', () => {
+    it('stops the latest qualified swing at its last visible date', () => {
+        const levels = { '0.382': '12.36', '0.5': '11.50', '0.618': '10.64' }
+        const signals = [
+            { date: '2025-01-01', fib_levels: null, swing_amplitude: null },
+            { date: '2025-01-02', fib_levels: levels, swing_amplitude: '0.20' },
+            { date: '2025-01-03', fib_levels: levels, swing_amplitude: '0.20' },
+            { date: '2025-01-04', fib_levels: null, swing_amplitude: null },
+            { date: '2025-01-05', fib_levels: null, swing_amplitude: null },
+        ] as KlineBacktestSignal[]
+
+        expect(latestQualifiedFibonacciRange(signals)).toEqual({
+            fromDate: '2025-01-02',
+            toDate: '2025-01-03',
+            levels,
+        })
+    })
+
+    it('selects the latest swing without connecting it to an older one', () => {
+        const older = { '0.382': '9.5' }
+        const latest = { '0.382': '12.5' }
+        const signals = [
+            { date: '2025-01-01', fib_levels: older, swing_amplitude: '0.10' },
+            { date: '2025-01-02', fib_levels: null, swing_amplitude: null },
+            { date: '2025-01-03', fib_levels: latest, swing_amplitude: '0.20' },
+            { date: '2025-01-04', fib_levels: latest, swing_amplitude: '0.20' },
+        ] as KlineBacktestSignal[]
+
+        expect(latestQualifiedFibonacciRange(signals)).toEqual({
+            fromDate: '2025-01-03',
+            toDate: '2025-01-04',
+            levels: latest,
+        })
+    })
+
+    it('rejects levels without a valid swing amplitude', () => {
+        const signals = [
+            { date: '2025-01-01', fib_levels: { '0.5': '10' }, swing_amplitude: null },
+        ] as KlineBacktestSignal[]
+
+        expect(latestQualifiedFibonacciRange(signals)).toBeNull()
     })
 })

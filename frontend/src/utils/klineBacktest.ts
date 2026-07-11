@@ -199,3 +199,43 @@ export function splitEffectiveTrendlines(
     })
     return segments
 }
+
+export interface QualifiedFibonacciRange {
+    fromDate: string
+    toDate: string
+    levels: Record<string, string>
+}
+
+/** Return the latest qualified swing only for the dates when it was visible. */
+export function latestQualifiedFibonacciRange(
+    signals: KlineBacktestSignal[],
+): QualifiedFibonacciRange | null {
+    let lastQualifiedIndex = -1
+    for (let index = signals.length - 1; index >= 0; index -= 1) {
+        if (signals[index].fib_levels
+            && signals[index].swing_amplitude != null
+            && Number.isFinite(Number(signals[index].swing_amplitude))) {
+            lastQualifiedIndex = index
+            break
+        }
+    }
+    if (lastQualifiedIndex < 0) return null
+
+    const levels = signals[lastQualifiedIndex].fib_levels!
+    const signature = JSON.stringify(levels)
+    let firstIndex = lastQualifiedIndex
+    while (firstIndex > 0) {
+        const previous = signals[firstIndex - 1]
+        const sameQualifiedSwing = previous.fib_levels
+            && previous.swing_amplitude != null
+            && Number.isFinite(Number(previous.swing_amplitude))
+            && JSON.stringify(previous.fib_levels) === signature
+        if (!sameQualifiedSwing) break
+        firstIndex -= 1
+    }
+    return {
+        fromDate: signals[firstIndex].date,
+        toDate: signals[lastQualifiedIndex].date,
+        levels,
+    }
+}

@@ -21,6 +21,7 @@ import {
     BacktestChartLayerKey,
     BacktestChartLayers,
     COMPACT_BACKTEST_CHART_LAYERS,
+    latestQualifiedFibonacciRange,
     resolveBacktestChartLayers,
     splitEffectiveTrendlines,
 } from '@/utils/klineBacktest'
@@ -155,24 +156,14 @@ export default function BacktestPriceChart({ candles, signals, trades, shortMa, 
             }))
         })
 
-        let lastQualifiedIndex = -1
-        for (let index = signals.length - 1; index >= 0; index -= 1) {
-            if (signals[index].fib_levels && finite(signals[index].swing_amplitude) != null) {
-                lastQualifiedIndex = index
-                break
-            }
-        }
         const fibonacciSeriesList: ISeriesApi<'Line'>[] = []
-        if (lastQualifiedIndex >= 0) {
-            const levels = signals[lastQualifiedIndex].fib_levels!
-            const signature = JSON.stringify(levels)
-            let firstIndex = lastQualifiedIndex
-            while (firstIndex > 0 && JSON.stringify(signals[firstIndex - 1].fib_levels) === signature) firstIndex -= 1
-            const from = asBusinessDay(signals[firstIndex].date)
-            const to = asBusinessDay(candles[candles.length - 1].date)
+        const fibonacciRange = latestQualifiedFibonacciRange(signals)
+        if (fibonacciRange) {
+            const from = asBusinessDay(fibonacciRange.fromDate)
+            const to = asBusinessDay(fibonacciRange.toDate)
             if (from && to) {
                 const colors: Record<string, string> = { '0.382': '#06b6d4', '0.5': '#14b8a6', '0.618': '#10b981' }
-                Object.entries(levels)
+                Object.entries(fibonacciRange.levels)
                     .filter(([ratio]) => ['0.382', '0.5', '0.618'].includes(ratio))
                     .forEach(([ratio, raw]) => {
                         const value = finite(raw)
