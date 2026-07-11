@@ -36,3 +36,23 @@ export function formatBacktestMetric(
     if (format === 'number') return String(Math.round(parsed))
     return parsed.toFixed(2)
 }
+
+export function backtestEndingPnl(metrics: Record<string, string | number | null> | null | undefined): number | null {
+    if (!metrics) return null
+    const explicit = Number(metrics.unrealized_pnl)
+    if (metrics.unrealized_pnl != null && Number.isFinite(explicit)) return explicit
+    const finalAsset = Number(metrics.final_asset)
+    const initialCash = Number(metrics.initial_cash)
+    return metrics.final_asset != null
+        && metrics.initial_cash != null
+        && Number.isFinite(finalAsset)
+        && Number.isFinite(initialCash)
+        ? finalAsset - initialCash
+        : null
+}
+
+export function formatSignedBacktestMoney(value: number | null): string {
+    if (value == null || !Number.isFinite(value)) return '--'
+    const sign = value > 0 ? '+' : value < 0 ? '-' : ''
+    return `${sign}¥${Math.abs(value).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`
+}

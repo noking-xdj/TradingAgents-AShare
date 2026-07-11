@@ -138,6 +138,9 @@ def test_benchmark_defers_initial_entry_and_reports_actual_date():
     benchmark = run_benchmark(bars, config, require_backtestable("600519.SH"), STOCK_FEE_PROFILE)
     assert benchmark.actual_entry_date == bars[1].date
     assert benchmark.equity[0].total == config.initial_cash
+    assert benchmark.metrics["unrealized_pnl"] == benchmark.metrics["final_asset"] - config.initial_cash
+    assert benchmark.metrics["unrealized_return"] == benchmark.metrics["total_return"]
+    assert benchmark.metrics["completed_trades"] == 0
 
 
 def test_profit_loss_ratio_uses_total_realized_wins_over_total_realized_losses():

@@ -183,4 +183,9 @@ def run_benchmark(
         position_value = money(bar.close * qty)
         equity.append(EquityPoint(bar.date, cash, position_value, money(cash + position_value)))
     metrics = compute_metrics(equity, orders, config)
+    # Buy-and-hold intentionally remains open at period end.  Its entire
+    # account-level P&L is therefore mark-to-market unrealized P&L; exit costs
+    # and taxes are not included until a future liquidation scenario exists.
+    metrics["unrealized_pnl"] = metrics["final_asset"] - config.initial_cash
+    metrics["unrealized_return"] = metrics["total_return"]
     return BenchmarkResult(entry_date, equity, metrics)

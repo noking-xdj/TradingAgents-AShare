@@ -11,7 +11,12 @@ import type {
 } from '@/types'
 import BacktestPerformanceCharts from './BacktestPerformanceCharts'
 import BacktestPriceChart from './BacktestPriceChart'
-import { BACKTEST_METRIC_CARDS, formatBacktestMetric } from '@/utils/backtestMetrics'
+import {
+    BACKTEST_METRIC_CARDS,
+    backtestEndingPnl,
+    formatBacktestMetric,
+    formatSignedBacktestMoney,
+} from '@/utils/backtestMetrics'
 import { BACKTEST_DATA_SOURCE_LABELS } from '@/utils/klineBacktest'
 
 interface Props {
@@ -57,6 +62,12 @@ export default function BacktestResults({ detail, selectedStrategy, equityByStra
     const loadedEnd = String(actualRange?.actual_end ?? detail.end_date)
     const statisticsStart = String(actualRange?.statistics_start ?? detail.start_date)
     const statisticsEnd = String(actualRange?.statistics_end ?? detail.end_date)
+    const benchmarkMetrics = detail.benchmark?.metrics
+    const benchmarkUnrealizedPnl = backtestEndingPnl(benchmarkMetrics)
+    const selectedEndingPnl = backtestEndingPnl(metrics)
+    const holdingAdvantage = benchmarkUnrealizedPnl != null && selectedEndingPnl != null
+        ? benchmarkUnrealizedPnl - selectedEndingPnl
+        : null
 
     return (
         <div className="space-y-4">
@@ -96,6 +107,34 @@ export default function BacktestResults({ detail, selectedStrategy, equityByStra
                         ))}
                     </div>
 
+                    {detail.benchmark && (
+                        <section className="card grid gap-4 md:grid-cols-3">
+                            <div>
+                                <p className="text-xs text-slate-500">简单持有浮盈</p>
+                                <p className={`mt-1 text-xl font-semibold ${(benchmarkUnrealizedPnl ?? 0) >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                                    {formatSignedBacktestMoney(benchmarkUnrealizedPnl)}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                    {formatBacktestMetric(benchmarkMetrics?.unrealized_return ?? benchmarkMetrics?.total_return, 'percent')} · 期末未卖出，不含退出费用
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-slate-500">策略 {selectedStrategy} 期末盈亏</p>
+                                <p className={`mt-1 text-xl font-semibold ${(selectedEndingPnl ?? 0) >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                                    {formatSignedBacktestMoney(selectedEndingPnl)}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-500">含已实现盈亏与期末持仓浮盈亏</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-slate-500">简单持有相对策略 {selectedStrategy}</p>
+                                <p className={`mt-1 text-xl font-semibold ${(holdingAdvantage ?? 0) >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                                    {formatSignedBacktestMoney(holdingAdvantage)}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-500">正数表示简单持有期末收益更高</p>
+                            </div>
+                        </section>
+                    )}
+
                     {noCompletedTradesForCash && (
                         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
                             <div className="flex items-start gap-2">
@@ -122,14 +161,14 @@ export default function BacktestResults({ detail, selectedStrategy, equityByStra
                         <section className="card min-w-0">
                             <h3 className="font-semibold">多策略对比</h3>
                             <div className="mt-3 overflow-x-auto">
-                                <table className="w-full min-w-[720px] text-left text-sm">
-                                    <thead className="text-xs text-slate-500"><tr><th className="py-2">策略</th><th>净收益</th><th>最大回撤</th><th>夏普</th><th>完整交易</th><th>胜率</th><th title="盈利交易净盈利总额 ÷ 亏损交易净亏损绝对值">盈亏比</th><th>总成本</th></tr></thead>
+                                <table className="w-full min-w-[840px] text-left text-sm">
+                                    <thead className="text-xs text-slate-500"><tr><th className="py-2">策略</th><th>净收益</th><th>期末盈亏</th><th>最大回撤</th><th>夏普</th><th>完整交易</th><th>胜率</th><th title="盈利交易净盈利总额 ÷ 亏损交易净亏损绝对值">盈亏比</th><th>总成本</th></tr></thead>
                                     <tbody>
                                         {strategies.map(key => {
                                             const row = detail.strategies[key]?.metrics ?? {}
-                                            return <tr key={key} className="border-t border-slate-100 dark:border-slate-700"><td className="py-2 font-semibold">{key}</td><td>{formatBacktestMetric(row.total_return, 'percent')}</td><td>{formatBacktestMetric(row.max_drawdown, 'percent')}</td><td>{formatBacktestMetric(row.sharpe, 'ratio')}</td><td>{formatBacktestMetric(row.completed_trades, 'number')}</td><td>{formatBacktestMetric(row.win_rate, 'percent')}</td><td>{formatBacktestMetric(row.profit_loss_ratio, 'ratio')}</td><td>{formatBacktestMetric(row.total_cost, 'money')}</td></tr>
+                                            return <tr key={key} className="border-t border-slate-100 dark:border-slate-700"><td className="py-2 font-semibold">{key}</td><td>{formatBacktestMetric(row.total_return, 'percent')}</td><td>{formatSignedBacktestMoney(backtestEndingPnl(row))}</td><td>{formatBacktestMetric(row.max_drawdown, 'percent')}</td><td>{formatBacktestMetric(row.sharpe, 'ratio')}</td><td>{formatBacktestMetric(row.completed_trades, 'number')}</td><td>{formatBacktestMetric(row.win_rate, 'percent')}</td><td>{formatBacktestMetric(row.profit_loss_ratio, 'ratio')}</td><td>{formatBacktestMetric(row.total_cost, 'money')}</td></tr>
                                         })}
-                                        {detail.benchmark && <tr className="border-t border-slate-100 text-slate-500 dark:border-slate-700"><td className="py-2 font-semibold">买入持有</td><td>{formatBacktestMetric(detail.benchmark.metrics.total_return, 'percent')}</td><td>{formatBacktestMetric(detail.benchmark.metrics.max_drawdown, 'percent')}</td><td>{formatBacktestMetric(detail.benchmark.metrics.sharpe, 'ratio')}</td><td>--</td><td>--</td><td>--</td><td>{formatBacktestMetric(detail.benchmark.metrics.total_cost, 'money')}</td></tr>}
+                                        {detail.benchmark && <tr className="border-t border-slate-100 text-slate-500 dark:border-slate-700"><td className="py-2 font-semibold">简单持有（浮盈）</td><td>{formatBacktestMetric(detail.benchmark.metrics.total_return, 'percent')}</td><td>{formatSignedBacktestMoney(benchmarkUnrealizedPnl)}</td><td>{formatBacktestMetric(detail.benchmark.metrics.max_drawdown, 'percent')}</td><td>{formatBacktestMetric(detail.benchmark.metrics.sharpe, 'ratio')}</td><td>0</td><td>--</td><td>--</td><td>{formatBacktestMetric(detail.benchmark.metrics.total_cost, 'money')}</td></tr>}
                                     </tbody>
                                 </table>
                             </div>
