@@ -3,7 +3,8 @@
 > 核对日期：2026-07-11
 > 分支：`codex/kline-data-source-selector`
 > 阶段 7 收尾提交：`8f445fb`
-> 最终实现提交：`5c89169`
+> 阶段 8 实现提交：`5c89169`<br>
+> 收尾实现提交：`29131f8`；未来函数审计：`78cf74d`
 > 当前结论：**全部通过，可以宣布首期交付完成**。东方财富历史接口持续断连后，经用户确认将临时默认源调整为股票腾讯、ETF 新浪，并完成强制刷新、缓存一致性与全部边界验收。
 
 ## 1. 真实 AkShare 集成测试
@@ -99,14 +100,23 @@
 
 ## 3. 回归与构建
 
-- 全仓 pytest：225 passed，11 skipped（仅 Redis 环境条件跳过），0 failed，0 errors，72 warnings。
+- 最近后端全仓 pytest 基线：226 passed，11 skipped（仅 Redis 环境条件跳过），0 failed，0 errors，72 warnings。
 - K 线专项：既有 49 项加新增默认源测试，共 50 项；全仓执行全部通过。
-- Vitest：4 files / 23 tests passed。
+- 收尾 Vitest：5 files / 27 tests passed。
 - 回测组件 ESLint：0 error，0 warning。
 - 前端生产构建：通过；仅既有大 chunk 提示。
 - `docker compose build`：通过。
-- `app` 健康检查与 `scheduler` 启动验证：重建后均正常，运行同一最新镜像 `sha256:41e1f7e145d09759eb8c22c067c20cebdbdf3ce39b2e82045a6986ea97acfc9a`。
+- `app` 健康检查与 `scheduler` 启动验证：收尾重建后均正常，运行同一最新镜像 `sha256:9136dff8d48952431da1cb77f5cfcec932f0c647b72e132c134626367cc5df85`。
 - 重启前真实回测与智能分析历史均可读，持久化结果未改变。
+
+### 3.1 未来函数收尾验证
+
+- 指标、策略、风控和成交时序逐项审计未发现代码级未来函数；详见 `docs/kline_backtest_lookahead_audit.md`。
+- 40 个历史前缀的指标快照全部保持不变，`40/40 PASS`。
+- 斐波图层已将最新合格波段的水平线终点限制在最后可见日，不再延伸到失效后的 K 线。
+- Edge 实机冒烟通过：历史 run 正常恢复，盈亏比正常展示，斐波图层切换和绘制正常。
+- 数据卷保留 11 条历史回测：8 completed、3 failed。
+- 本轮未改后端产品代码；隔离容器临时 pytest 依赖下载阻塞，因此未将未完成的后端复跑命令计为新的通过结果；改动范围已由 27 项前端测试、ESLint、生产构建和实机冒烟覆盖。
 
 ## 4. 静态约束审计
 

@@ -4,7 +4,7 @@
 
 - 建立日期：2026-07-10
 - 阶段 6 起点提交：`29fd2a7`
-- 当前基线：盈亏比功能补全（实现提交 `892cdd6`）
+- 当前基线：盈亏比功能补全（实现提交 `892cdd6`），斐波图层可见区间收尾（`29131f8`）
 - 分支：`codex/kline-data-source-selector`
 - 运行环境：Docker `tradingagents-ashare:local`
 - Python：3.10.19
@@ -69,12 +69,14 @@ Golden-file、“全年无有效线/无合格波段”零交易夹具，以及 A
 
 ```text
 5 files passed
-24 tests passed
+27 tests passed
 0 failed
-completed in 566ms
+completed in 421ms
 ```
 
 前端生产构建和回测组件定点 ESLint 同时通过；Vite 仅保留既有的大 chunk 提示，不属于构建失败。
+
+本轮收尾只修改前端斐波图层及测试，未修改 `api/`、`scheduler/` 或回测引擎。最近一次后端全仓基线仍为 226 passed / 11 skipped；本轮隔离容器复跑因临时 pytest 依赖下载阻塞未产生新的 pytest 结果，不将未完成命令计为通过。改动范围已由前端全量 Vitest、定点 ESLint、生产构建和 Edge 实机冒烟覆盖。
 
 ### 3.4 鉴权断言
 
