@@ -4,7 +4,7 @@
 
 - 建立日期：2026-07-10
 - 阶段 6 起点提交：`29fd2a7`
-- 当前基线：阶段 8 首期交付完成（最终实现提交 `5c89169`）
+- 当前基线：盈亏比功能补全（实现提交 `892cdd6`）
 - 分支：`codex/kline-data-source-selector`
 - 运行环境：Docker `tradingagents-ashare:local`
 - Python：3.10.19
@@ -46,13 +46,13 @@ python -m pytest -vv -p no:cacheprovider \
 ### 3.1 全仓测试
 
 ```text
-236 collected
-225 passed
+237 collected
+226 passed
 0 failed
 11 skipped
 0 errors
 72 warnings
-completed in 16.87s
+completed in 16.72s
 ```
 
 pytest 正常运行到 100% 并退出，不再卡在 `tests/test_scheduled_queue.py`。
@@ -60,16 +60,16 @@ pytest 正常运行到 100% 并退出，不再卡在 `tests/test_scheduled_queue
 ### 3.2 K 线回测专项
 
 ```text
-50 K 线专项测试均在全仓测试中通过
+51 K 线专项测试均在全仓测试中通过
 ```
 
-Golden-file、“全年无有效线/无合格波段”零交易夹具，以及 API、状态机、持久化、权限、删除、专用队列、孤儿恢复、显式数据源选择、按品种默认源、连接重试、缓存完整版本回放和腾讯成交量规范化均包含在这 50 项内。
+Golden-file、“全年无有效线/无合格波段”零交易夹具，以及 API、状态机、持久化、权限、删除、专用队列、孤儿恢复、显式数据源选择、按品种默认源、连接重试、缓存完整版本回放、盈亏比口径和腾讯成交量规范化均包含在这 51 项内。
 
 ### 3.3 前端 Vitest
 
 ```text
-4 files passed
-23 tests passed
+5 files passed
+24 tests passed
 0 failed
 completed in 566ms
 ```
@@ -139,7 +139,7 @@ TestChatCompletionsEndpoint::test_requires_auth PASSED
 - `0 failed`；
 - `0 errors`；
 - skipped 仅限未运行 Redis 时的 11 项 `tests/test_job_store_redis.py`；
-- K 线回测专项 50 项全部通过；
+- K 线回测专项 51 项全部通过；
 - 两个 `test_requires_auth` 全部通过。
 
 任何失败、错误、挂死、新增 skipped，或既有通过项转为 skipped，均视为回归。带 Redis 的阶段 8 集成环境还应要求 11 项 Redis 测试执行并通过。
